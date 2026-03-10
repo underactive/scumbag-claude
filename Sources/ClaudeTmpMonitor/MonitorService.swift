@@ -41,14 +41,6 @@ enum MonitorStatus: String {
     case normal = "Normal"
     case warning = "Warning"
     case critical = "Critical"
-
-    var iconName: String {
-        switch self {
-        case .normal: return "externaldrive"
-        case .warning: return "exclamationmark.triangle"
-        case .critical: return "exclamationmark.triangle.fill"
-        }
-    }
 }
 
 // MARK: - Monitor Service
@@ -114,8 +106,6 @@ class MonitorService: ObservableObject {
             }
         }
     }
-
-    var statusIcon: String { status.iconName }
 
     var warningBytes: UInt64 { UInt64(clamping: warningThresholdMB) * 1024 * 1024 }
     var criticalBytes: UInt64 { UInt64(clamping: criticalThresholdMB) * 1024 * 1024 }
