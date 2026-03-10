@@ -19,8 +19,8 @@ bundle: build
 	@cp $(RELEASE_DIR)/$(EXECUTABLE) "$(RELEASE_DIR)/$(BUNDLE_NAME)/Contents/MacOS/"
 	@cp Info.plist "$(RELEASE_DIR)/$(BUNDLE_NAME)/Contents/"
 	@cp Sources/ClaudeTmpMonitor/Resources/AppIcon.icns "$(RELEASE_DIR)/$(BUNDLE_NAME)/Contents/Resources/"
-	@# Copy SPM resource bundle into app bundle
-	@cp -R $(RELEASE_DIR)/ClaudeTmpMonitor_ClaudeTmpMonitor.bundle "$(RELEASE_DIR)/$(BUNDLE_NAME)/Contents/Resources/" 2>/dev/null || true
+	@# Copy SPM resource bundle next to executable (where resource_bundle_accessor.swift looks first)
+	@cp -R $(RELEASE_DIR)/ClaudeTmpMonitor_ClaudeTmpMonitor.bundle "$(RELEASE_DIR)/$(BUNDLE_NAME)/Contents/MacOS/" 2>/dev/null || true
 	@echo "Built: $(RELEASE_DIR)/$(BUNDLE_NAME)"
 
 install: bundle
