@@ -39,7 +39,7 @@ Six-file SwiftUI app using a custom `NSStatusItem` for menubar integration.
 ### Key Subsystems
 
 #### 1. File Monitoring (MonitorService.scan)
-- Timer-based polling scans `/private/tmp/claude-*/` every N seconds (default 30)
+- Timer-based polling scans `/private/tmp/claude-*/` every N seconds (default 15)
 - Enumerates all subdirectories and files recursively via `FileManager.enumerator`
 - Resolves symlinks to get actual file sizes; detects and handles broken symlinks
 - Deduplicates by resolved path (`seenResolvedPaths: Set<String>`) to avoid double-counting
@@ -62,7 +62,7 @@ Six-file SwiftUI app using a custom `NSStatusItem` for menubar integration.
 ```swift
 warningThresholdMB: Int     // default: 100, range: 10...1000000
 criticalThresholdMB: Int    // default: 500, range: 50...1000000
-scanIntervalSeconds: Int    // default: 30, range: 5...300
+scanIntervalSeconds: Int    // default: 15, range: 5...300
 staleDaysThreshold: Int     // default: 7, range: 1...90
 notificationsEnabled: Bool  // default: true
 showSizeInMenuBar: Bool     // default: true
