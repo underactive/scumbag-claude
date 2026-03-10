@@ -96,14 +96,13 @@ class UpdateService: ObservableObject {
 
     // MARK: - Public Methods
 
+    // Auto-update disabled until release builds are code-signed and notarized.
+    // See feature/codesign-notarize branch. To re-enable, remove the #if false / #endif.
     func checkForUpdates(manual: Bool) async {
-        // Auto-update disabled until release builds are code-signed and notarized.
         if manual {
             status = .error("Updates are disabled until code signing is configured.")
-            return
         }
-        return
-
+        #if false
         guard status != .checking else { return }
         status = .checking
 
@@ -131,6 +130,7 @@ class UpdateService: ObservableObject {
                 status = .idle
             }
         }
+        #endif
     }
 
     func downloadUpdate() {
