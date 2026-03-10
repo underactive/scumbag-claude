@@ -4,7 +4,7 @@
 
 **Scumbag Claude** (aka Claude Tmp Monitor) is a macOS menubar application that monitors Claude Code's temporary file directories (`/private/tmp/claude-*/`) for large `.output` files and stale task directories, alerting the user and providing quick cleanup actions.
 
-**Current Version:** 0.2.0
+**Current Version:** 0.2.1
 **Status:** In development
 
 ---
@@ -22,7 +22,7 @@ Five-file SwiftUI app using a custom `NSStatusItem` for menubar integration.
 
 - `Sources/ClaudeTmpMonitor/App.swift` - Entry point: `@main` SwiftUI App with `NSApplicationDelegateAdaptor`. `AppDelegate` owns `MonitorService`, creates `NSStatusItem` with `NSPopover` (left-click) and `NSMenu` (right-click). Manages singleton `NSWindow` instances for Settings and About dialogs. Uses `Combine` subscriber on `monitor.$status` + `monitor.$totalSize` to reactively update menubar icon and title. Loads menubar icon from `Bundle.module` resources.
 - `Sources/ClaudeTmpMonitor/MonitorService.swift` - Core business logic: models (`MonitoredFile`, `ClaudeProject`, `MonitorStatus`), scanning, settings persistence, notifications, deletion
-- `Sources/ClaudeTmpMonitor/ContentView.swift` - Main popover view: header, status bar, expandable projects list, footer with Settings button, Clean All, and Quit. Receives `onOpenSettings` closure from `AppDelegate`.
+- `Sources/ClaudeTmpMonitor/ContentView.swift` - Main popover view: header, status bar, expandable projects list, footer with Settings button, Clean All, and Quit. Receives `onOpenSettings` closure from `AppDelegate`. Defines `HoverButtonStyle` (custom `ButtonStyle` with configurable hover color) used by icon-only buttons.
 - `Sources/ClaudeTmpMonitor/SettingsView.swift` - Settings dialog: threshold/interval rows, notifications toggle, launch at login toggle. Hosted in a separate `NSWindow`.
 - `Sources/ClaudeTmpMonitor/AboutView.swift` - About dialog: app icon, name, version, GitHub link. Hosted in a separate `NSWindow`.
 
@@ -63,6 +63,7 @@ criticalThresholdMB: Int    // default: 500, range: 50...50000
 scanIntervalSeconds: Int    // default: 30, range: 5...300
 staleDaysThreshold: Int     // default: 7, range: 1...90
 notificationsEnabled: Bool  // default: true
+showSizeInMenuBar: Bool     // default: true
 launchAtLogin: Bool         // reads from SMAppService.mainApp.status
 lastDeleteError: String?    // surfaced in footer when non-nil
 notificationsDenied: Bool   // true when system notification permission is denied
@@ -83,7 +84,7 @@ notificationsDenied: Bool   // true when system notification permission is denie
 - No communication protocol — all operations are local filesystem
 
 ### Data Flow
-`MonitorService` is created and owned by `AppDelegate`. It is passed to `ContentView` (popover) and `SettingsView` (dialog) via `.environmentObject()`. All state mutations happen on `@MainActor`. The timer callback dispatches back to `@MainActor` via `Task`. Menubar icon/title updates are driven by a `Combine` subscriber on `monitor.$status` and `monitor.$totalSize`.
+`MonitorService` is created and owned by `AppDelegate`. It is passed to `ContentView` (popover) and `SettingsView` (dialog) via `.environmentObject()`. All state mutations happen on `@MainActor`. The timer callback dispatches back to `@MainActor` via `Task`. Menubar icon/title updates are driven by a `Combine` subscriber on `monitor.$status`, `monitor.$totalSize`, and `monitor.$showSizeInMenuBar`.
 
 ---
 
@@ -295,6 +296,7 @@ Version string appears in 2 files:
 | `CLAUDE_TEMPLATE.md` | Template for generating CLAUDE.md files |
 | `docs/` | Plans, testing checklist, version history, future improvements |
 | `docs/CLAUDE.md/plans/` | Plan, implementation, and audit records (epoch-prefixed directories for chronological ordering) |
+| `assets/` | Source artwork (`ScumbagCap.png`) used to generate menubar icon silhouette |
 
 ---
 
