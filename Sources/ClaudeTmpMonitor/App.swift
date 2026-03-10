@@ -12,13 +12,46 @@ struct ClaudeTmpMonitorApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var monitor = MonitorService()
 
-    private static let cachedMenuBarImage: NSImage? = {
+    // MARK: - Pre-cached menubar icons
+
+    private static let iconSize = NSSize(width: 18, height: 18)
+
+    private static let baseImage: NSImage? = {
         guard let url = Bundle.module.url(forResource: "MenuBarIcon", withExtension: "png"),
               let img = NSImage(contentsOf: url) else { return nil }
-        img.size = NSSize(width: 18, height: 18)
+        img.size = iconSize
+        return img
+    }()
+
+    private static let normalImage: NSImage? = {
+        guard let img = baseImage?.copy() as? NSImage else { return nil }
         img.isTemplate = true
         return img
     }()
+
+    private static let warningImage: NSImage? = tinted(with: .orange)
+    private static let criticalImage: NSImage? = tinted(with: .red)
+
+    // Composites the base icon with a color using .sourceAtop to tint only opaque pixels
+    private static func tinted(with color: NSColor) -> NSImage? {
+        guard let original = baseImage else { return nil }
+        let tinted = NSImage(size: iconSize, flipped: false) { rect in
+            original.draw(in: rect)
+            color.set()
+            rect.fill(using: .sourceAtop)
+            return true
+        }
+        tinted.isTemplate = false
+        return tinted
+    }
+
+    private static func image(for status: MonitorStatus) -> NSImage? {
+        switch status {
+        case .normal: return normalImage
+        case .warning: return warningImage
+        case .critical: return criticalImage
+        }
+    }
 
     var body: some Scene {
         MenuBarExtra {
@@ -26,7 +59,7 @@ struct ClaudeTmpMonitorApp: App {
                 .environmentObject(monitor)
         } label: {
             HStack(spacing: 4) {
-                if let img = Self.cachedMenuBarImage {
+                if let img = Self.image(for: monitor.status) {
                     Image(nsImage: img)
                 } else {
                     Image(systemName: monitor.statusIcon)

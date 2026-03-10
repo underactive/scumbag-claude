@@ -48,6 +48,14 @@
 - [ ] Dot separators in status bar are hidden from VoiceOver
 - [ ] Menubar label reads "Scumbag Claude status"
 
+## Menubar Icon Color
+- [ ] Menubar icon appears as system-tinted (template) icon in normal status (adapts to light/dark mode)
+- [ ] Menubar icon turns orange when status changes to warning
+- [ ] Menubar icon turns red when status changes to critical
+- [ ] Menubar icon reverts to normal after deleting files that caused elevated status
+- [ ] Orange and red icons remain their color regardless of light/dark mode
+- [ ] If MenuBarIcon.png resource is missing, a fallback SF Symbol icon appears
+
 ## Notifications
 - [ ] Warning notification fires when a file crosses the warning threshold
 - [ ] Critical notification fires when a file crosses the critical threshold
