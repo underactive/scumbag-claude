@@ -26,7 +26,15 @@ Claude Code writes task output to `/private/tmp/claude-*/` directories. These `.
 
 ## Screenshots
 
-*Coming soon*
+<p align="center">
+  <img src="assets/menu_screenshot.png" width="400" alt="Scumbag Claude menubar popover showing per-project file breakdown">
+  &nbsp;&nbsp;
+  <img src="assets/settings_sceenshot.png" width="300" alt="Scumbag Claude settings window">
+</p>
+
+## Why
+
+Claude Code's Task tool writes `.output` files to `/private/tmp/claude-*/` that **never get cleaned up**. A single research-heavy session can generate hundreds of gigabytes, filling your disk without warning. This has been [reported as a bug](https://github.com/anthropics/claude-code/issues/26911) — one user hit **537 GB from a single session**, with disk-full emergencies 6+ times in 30 days. Until there's an official fix, Scumbag Claude watches these directories so you don't have to.
 
 ## Requirements
 
