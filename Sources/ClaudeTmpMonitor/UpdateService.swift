@@ -165,6 +165,7 @@ class UpdateService: ObservableObject {
             // Pass paths as positional arguments to avoid shell injection
             let script = """
             #!/bin/bash
+            set -e
             CURRENT_APP="$1"
             NEW_APP="$2"
             TEMP_DIR="$3"
@@ -175,7 +176,10 @@ class UpdateService: ObservableObject {
             rm -rf "$CURRENT_APP"
             cp -R "$NEW_APP" "$CURRENT_APP"
             xattr -cr "$CURRENT_APP"
-            open "$CURRENT_APP"
+            # Reset Launch Services registration so macOS recognizes the replaced bundle
+            /System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f "$CURRENT_APP"
+            sleep 1
+            open -n "$CURRENT_APP"
             rm -rf "$TEMP_DIR"
             rm -f "$0"
             """
