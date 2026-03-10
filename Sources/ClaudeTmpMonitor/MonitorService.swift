@@ -63,14 +63,14 @@ class MonitorService: ObservableObject {
     // Settings
     @Published var warningThresholdMB: Int {
         didSet {
-            let clamped = min(max(warningThresholdMB, 10), 10000)
+            let clamped = min(max(warningThresholdMB, 10), 1000000)
             if warningThresholdMB != clamped { warningThresholdMB = clamped; return }
             UserDefaults.standard.set(warningThresholdMB, forKey: SettingsKey.warningThresholdMB)
         }
     }
     @Published var criticalThresholdMB: Int {
         didSet {
-            let clamped = min(max(criticalThresholdMB, 50), 50000)
+            let clamped = min(max(criticalThresholdMB, 50), 1000000)
             if criticalThresholdMB != clamped { criticalThresholdMB = clamped; return }
             UserDefaults.standard.set(criticalThresholdMB, forKey: SettingsKey.criticalThresholdMB)
         }
@@ -125,10 +125,10 @@ class MonitorService: ObservableObject {
         let defaults = UserDefaults.standard
 
         let rawWarning = defaults.object(forKey: SettingsKey.warningThresholdMB) as? Int ?? 100
-        self.warningThresholdMB = min(max(rawWarning, 10), 10000)
+        self.warningThresholdMB = min(max(rawWarning, 10), 1000000)
 
         let rawCritical = defaults.object(forKey: SettingsKey.criticalThresholdMB) as? Int ?? 500
-        self.criticalThresholdMB = min(max(rawCritical, 50), 50000)
+        self.criticalThresholdMB = min(max(rawCritical, 50), 1000000)
 
         let rawInterval = defaults.object(forKey: SettingsKey.scanIntervalSeconds) as? Int ?? 30
         self.scanIntervalSeconds = min(max(rawInterval, 5), 300)
