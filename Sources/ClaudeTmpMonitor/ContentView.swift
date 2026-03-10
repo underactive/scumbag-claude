@@ -1,12 +1,20 @@
 import SwiftUI
 
+// MARK: - Delete Confirmation
+
+enum DeleteConfirmation: Equatable {
+    case file(String)
+    case project(String)
+    case all
+}
+
 // MARK: - Main Content View
 
 struct ContentView: View {
     @EnvironmentObject var monitor: MonitorService
     @State private var showSettings = false
     @State private var expandedProjects: Set<String> = []
-    @State private var confirmDelete: String? = nil
+    @State private var confirmDelete: DeleteConfirmation? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -47,6 +55,8 @@ struct ContentView: View {
             }
             .buttonStyle(.plain)
             .disabled(monitor.isScanning)
+            .accessibilityLabel("Refresh")
+            .keyboardShortcut("r", modifiers: .command)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
@@ -64,11 +74,13 @@ struct ContentView: View {
                 .foregroundColor(statusColor)
             Text("·")
                 .foregroundColor(.secondary)
+                .accessibilityHidden(true)
             Text(formatBytes(monitor.totalSize))
                 .font(.subheadline)
             Text("·")
                 .foregroundColor(.secondary)
-            Text("\(monitor.totalFileCount) files")
+                .accessibilityHidden(true)
+            Text("\(monitor.totalFileCount) \(monitor.totalFileCount == 1 ? "file" : "files")")
                 .font(.subheadline)
                 .foregroundColor(.secondary)
             Spacer()
@@ -99,7 +111,7 @@ struct ContentView: View {
                 .foregroundColor(.secondary)
             Text("/private/tmp/claude-*/")
                 .font(.caption)
-                .foregroundColor(.secondary.opacity(0.6))
+                .foregroundColor(.secondary)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 20)
@@ -120,7 +132,7 @@ struct ContentView: View {
                 }
             }
         }
-        .frame(maxHeight: 300)
+        .frame(minHeight: 60, maxHeight: 300)
     }
 
     private func projectRow(_ project: ClaudeProject) -> some View {
@@ -132,6 +144,7 @@ struct ContentView: View {
                     .frame(width: 12)
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(expandedProjects.contains(project.id) ? "Collapse project" : "Expand project")
 
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 4) {
@@ -148,7 +161,7 @@ struct ContentView: View {
                             .cornerRadius(3)
                     }
                 }
-                Text("\(project.files.count) files · \(project.claudeDir)")
+                Text("\(project.files.count) \(project.files.count == 1 ? "file" : "files") · \(project.claudeDir)")
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .lineLimit(1)
@@ -160,7 +173,7 @@ struct ContentView: View {
                 .font(.subheadline.monospacedDigit())
                 .foregroundColor(sizeColor(project.totalSize))
 
-            if confirmDelete == project.id {
+            if confirmDelete == .project(project.id) {
                 Button("Cancel") { confirmDelete = nil }
                     .font(.caption)
                     .buttonStyle(.plain)
@@ -173,12 +186,13 @@ struct ContentView: View {
                 .buttonStyle(.plain)
                 .foregroundColor(.red)
             } else {
-                Button(action: { confirmDelete = project.id }) {
+                Button(action: { confirmDelete = .project(project.id) }) {
                     Image(systemName: "trash")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Delete project")
             }
         }
         .padding(.horizontal, 12)
@@ -215,7 +229,7 @@ struct ContentView: View {
                 } else if file.isSymlink {
                     Text("→ \((file.resolvedPath as NSString).lastPathComponent)")
                         .font(.caption2)
-                        .foregroundColor(.secondary.opacity(0.6))
+                        .foregroundColor(.secondary)
                         .lineLimit(1)
                 }
             }
@@ -228,7 +242,7 @@ struct ContentView: View {
                     .foregroundColor(sizeColor(file.size))
             }
 
-            if confirmDelete == file.id {
+            if confirmDelete == .file(file.id) {
                 Button("Cancel") { confirmDelete = nil }
                     .font(.caption2)
                     .buttonStyle(.plain)
@@ -241,12 +255,13 @@ struct ContentView: View {
                 .buttonStyle(.plain)
                 .foregroundColor(.red)
             } else {
-                Button(action: { confirmDelete = file.id }) {
+                Button(action: { confirmDelete = .file(file.id) }) {
                     Image(systemName: "xmark.circle")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Delete file")
             }
         }
         .padding(.horizontal, 12)
@@ -261,13 +276,20 @@ struct ContentView: View {
                 .font(.subheadline.weight(.medium))
                 .padding(.bottom, 2)
 
-            settingRow("Warning threshold", value: $monitor.warningThresholdMB, unit: "MB", range: 10...10000)
-            settingRow("Critical threshold", value: $monitor.criticalThresholdMB, unit: "MB", range: 50...50000)
-            settingRow("Scan interval", value: $monitor.scanIntervalSeconds, unit: "sec", range: 5...300)
-            settingRow("Stale after", value: $monitor.staleDaysThreshold, unit: "days", range: 1...90)
+            settingRow("Warning threshold", value: $monitor.warningThresholdMB, unit: "MB")
+            settingRow("Critical threshold", value: $monitor.criticalThresholdMB, unit: "MB")
+            settingRow("Scan interval", value: $monitor.scanIntervalSeconds, unit: "sec")
+            settingRow("Stale after", value: $monitor.staleDaysThreshold, unit: "days")
 
             Toggle("Notifications", isOn: $monitor.notificationsEnabled)
                 .font(.subheadline)
+
+            if monitor.notificationsDenied {
+                Text("Notifications are denied in System Settings.")
+                    .font(.caption)
+                    .foregroundColor(.orange)
+            }
+
             Toggle("Launch at Login", isOn: $monitor.launchAtLogin)
                 .font(.subheadline)
         }
@@ -275,20 +297,16 @@ struct ContentView: View {
         .padding(.vertical, 8)
     }
 
-    private func settingRow(_ label: String, value: Binding<Int>, unit: String, range: ClosedRange<Int>) -> some View {
+    private func settingRow(_ label: String, value: Binding<Int>, unit: String) -> some View {
         HStack {
             Text(label)
                 .font(.subheadline)
                 .foregroundColor(.secondary)
             Spacer()
-            TextField("", value: value, format: .number)
+            TextField(label, value: value, format: .number)
                 .textFieldStyle(.roundedBorder)
                 .frame(width: 60)
                 .multilineTextAlignment(.trailing)
-                .onChange(of: value.wrappedValue) { newValue in
-                    if newValue < range.lowerBound { value.wrappedValue = range.lowerBound }
-                    if newValue > range.upperBound { value.wrappedValue = range.upperBound }
-                }
             Text(unit)
                 .font(.caption)
                 .foregroundColor(.secondary)
@@ -299,50 +317,62 @@ struct ContentView: View {
     // MARK: - Footer
 
     private var footerSection: some View {
-        HStack {
-            Button(action: { showSettings.toggle() }) {
-                Image(systemName: "gear")
-                Text(showSettings ? "Hide Settings" : "Settings")
-                    .font(.subheadline)
+        VStack(spacing: 4) {
+            if let error = monitor.lastDeleteError {
+                Text(error)
+                    .font(.caption)
+                    .foregroundColor(.red)
+                    .lineLimit(2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 12)
             }
-            .buttonStyle(.plain)
-            .foregroundColor(.secondary)
 
-            Spacer()
-
-            if !monitor.projects.isEmpty {
-                Button(action: { confirmDelete = "all" }) {
-                    Text("Clean All")
+            HStack {
+                Button(action: { showSettings.toggle() }) {
+                    Image(systemName: "gear")
+                    Text(showSettings ? "Hide Settings" : "Settings")
                         .font(.subheadline)
                 }
                 .buttonStyle(.plain)
-                .foregroundColor(.orange)
-            }
+                .foregroundColor(.secondary)
+                .accessibilityLabel("Settings")
+                .keyboardShortcut(",", modifiers: .command)
 
-            if confirmDelete == "all" {
-                Button("Cancel") { confirmDelete = nil }
+                Spacer()
+
+                if !monitor.projects.isEmpty {
+                    Button(action: { confirmDelete = .all }) {
+                        Text("Clean All")
+                            .font(.subheadline)
+                    }
+                    .buttonStyle(.plain)
+                    .foregroundColor(.orange)
+                }
+
+                if confirmDelete == .all {
+                    Button("Cancel") { confirmDelete = nil }
+                        .font(.caption)
+                        .buttonStyle(.plain)
+                    Button("Confirm") {
+                        monitor.deleteAllProjects()
+                        confirmDelete = nil
+                    }
                     .font(.caption)
                     .buttonStyle(.plain)
-                Button("Confirm") {
-                    for project in monitor.projects {
-                        monitor.deleteProject(project)
-                    }
-                    confirmDelete = nil
+                    .foregroundColor(.red)
                 }
-                .font(.caption)
-                .buttonStyle(.plain)
-                .foregroundColor(.red)
-            }
 
-            Button("Quit") {
-                NSApplication.shared.terminate(nil)
+                Button("Quit") {
+                    NSApplication.shared.terminate(nil)
+                }
+                .buttonStyle(.plain)
+                .foregroundColor(.secondary)
+                .font(.subheadline)
+                .keyboardShortcut("q", modifiers: .command)
             }
-            .buttonStyle(.plain)
-            .foregroundColor(.secondary)
-            .font(.subheadline)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
     }
 
     // MARK: - Helpers
@@ -356,10 +386,8 @@ struct ContentView: View {
     }
 
     private func sizeColor(_ bytes: UInt64) -> Color {
-        let criticalBytes = UInt64(monitor.criticalThresholdMB) * 1024 * 1024
-        let warningBytes = UInt64(monitor.warningThresholdMB) * 1024 * 1024
-        if bytes >= criticalBytes { return .red }
-        if bytes >= warningBytes { return .orange }
+        if bytes >= monitor.criticalBytes { return .red }
+        if bytes >= monitor.warningBytes { return .orange }
         return .primary
     }
 }

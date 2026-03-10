@@ -4,7 +4,7 @@
 
 **Scumbag Claude** (aka Claude Tmp Monitor) is a macOS menubar application that monitors Claude Code's temporary file directories (`/private/tmp/claude-*/`) for large `.output` files and stale task directories, alerting the user and providing quick cleanup actions.
 
-**Current Version:** 0.1.0
+**Current Version:** 0.2.0
 **Status:** In development
 
 ---
@@ -55,20 +55,28 @@ Three-file SwiftUI app using `MenuBarExtra` for menubar integration.
 
 #### 3. Settings / Configuration Storage
 ```swift
-warningThresholdMB: Int     // default: 100
-criticalThresholdMB: Int    // default: 500
-scanIntervalSeconds: Int    // default: 30
-staleDaysThreshold: Int     // default: 7
+warningThresholdMB: Int     // default: 100, range: 10...10000
+criticalThresholdMB: Int    // default: 500, range: 50...50000
+scanIntervalSeconds: Int    // default: 30, range: 5...300
+staleDaysThreshold: Int     // default: 7, range: 1...90
 notificationsEnabled: Bool  // default: true
 launchAtLogin: Bool         // reads from SMAppService.mainApp.status
+lastDeleteError: String?    // surfaced in footer when non-nil
+notificationsDenied: Bool   // true when system notification permission is denied
 ```
 - Saved to `UserDefaults` via `@Published var` with `didSet` persistence pattern
 - Default values loaded in `MonitorService.init()` using `defaults.object(forKey:) as? Type ?? fallback`
+- Values are clamped to valid ranges both at load time and in `didSet` blocks
+- UserDefaults keys are defined in `SettingsKey` enum (static string constants)
+- Computed properties `warningBytes` / `criticalBytes` provide pre-converted threshold values
 
 #### 4. File Deletion
-- Deleting a file: removes the symlink target first (to reclaim space), then the symlink/file entry itself
-- Deleting a project: removes all symlink targets, then the entire project directory via `removeItem(atPath:)`
-- UI uses inline confirm/cancel buttons (tracked by `confirmDelete: String?` state in ContentView)
+- **Path validation allowlist**: symlink targets are only deleted if the resolved path starts with `/private/tmp/claude-` or `~/.claude/projects/`. Out-of-scope targets are skipped — the symlink itself is always removed to clean up the directory entry.
+- Deleting a file: validates symlink target scope, removes target if allowed, then removes the symlink/file entry itself
+- Deleting a project: validates each symlink target, removes allowed targets, then removes the entire project directory via `removeItem(atPath:)`
+- Batch deletion: `deleteAllProjects()` deletes all projects and scans once at the end (not per-project)
+- UI uses inline confirm/cancel buttons (tracked by `DeleteConfirmation` enum in ContentView)
+- Deletion errors are surfaced via `lastDeleteError` published property, shown in the footer
 - No communication protocol — all operations are local filesystem
 
 ### Data Flow
@@ -114,7 +122,8 @@ No external services or third-party SDKs. All operations are local filesystem an
 
 1. **No FSEvents** — Uses timer-based polling instead of FSEvents. Simpler but slightly higher latency for detecting new files.
 2. **No auto-cleanup** — Settings exist for thresholds but auto-deletion is not yet implemented.
-4. **Hardcoded skip words in `extractProjectName`** — The display name extractor has a hardcoded `skipWords` set (`Users`, `Development`, `personal`, `hardware`, `esison`) that won't work for other users.
+3. **Hardcoded skip words in `extractProjectName`** — The display name extractor has a hardcoded `skipWords` set (`Users`, `Development`, `personal`, `hardware`, `esison`) that won't work for other users.
+4. **No TOCTOU protection on delete** — Symlink targets are not re-resolved at delete time. A symlink could be retargeted between scan and delete. Deferred to separate plan.
 
 ---
 
