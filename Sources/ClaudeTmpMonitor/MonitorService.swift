@@ -11,6 +11,9 @@ enum SettingsKey {
     static let staleDaysThreshold = "staleDaysThreshold"
     static let notificationsEnabled = "notificationsEnabled"
     static let showSizeInMenuBar = "showSizeInMenuBar"
+    static let checkForUpdatesAutomatically = "checkForUpdatesAutomatically"
+    static let lastUpdateCheckTime = "lastUpdateCheckTime"
+    static let dismissedUpdateVersion = "dismissedUpdateVersion"
 }
 
 // MARK: - Models

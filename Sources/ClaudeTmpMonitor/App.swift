@@ -8,6 +8,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var popover: NSPopover!
     private var rightClickMenu: NSMenu!
     let monitor = MonitorService()
+    let updateService = UpdateService()
     private var cancellables = Set<AnyCancellable>()
     private var settingsWindow: NSWindow?
     private var aboutWindow: NSWindow?
@@ -82,6 +83,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         popover.contentViewController = NSHostingController(
             rootView: ContentView(onOpenSettings: { [weak self] in self?.openSettings() })
                 .environmentObject(monitor)
+                .environmentObject(updateService)
         )
 
         // Right-click menu
@@ -89,6 +91,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         rightClickMenu.addItem(
             withTitle: "About Scumbag Claude",
             action: #selector(showAbout),
+            keyEquivalent: ""
+        ).target = self
+        rightClickMenu.addItem(
+            withTitle: "Check for Updates...",
+            action: #selector(checkForUpdates),
             keyEquivalent: ""
         ).target = self
         rightClickMenu.addItem(.separator())
@@ -141,6 +148,18 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    // MARK: - Check for Updates
+
+    @objc func checkForUpdates() {
+        Task { @MainActor in
+            await updateService.checkForUpdates(manual: true)
+        }
+        // Show the popover so user can see the result
+        if let button = statusItem.button, !popover.isShown {
+            togglePopover(button)
+        }
+    }
+
     // MARK: - Settings Window
 
     func openSettings() {
@@ -152,6 +171,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         let settingsView = SettingsView()
             .environmentObject(monitor)
+            .environmentObject(updateService)
         let hostingController = NSHostingController(rootView: settingsView)
 
         let window = NSWindow(contentViewController: hostingController)
@@ -176,6 +196,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let aboutView = AboutView()
+            .environmentObject(updateService)
         let hostingController = NSHostingController(rootView: aboutView)
 
         let window = NSWindow(contentViewController: hostingController)
