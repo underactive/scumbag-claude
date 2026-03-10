@@ -37,6 +37,78 @@ private struct HoverButtonBody: View {
     }
 }
 
+// MARK: - Scan Timer View
+
+/// Shows a pie chart that empties as the next scan approaches, switching to a spinner
+/// for the last 2 seconds of the interval.
+private struct ScanTimerView: View {
+    let nextScanTime: Date
+    let scanInterval: TimeInterval
+
+    @State private var fraction: CGFloat = 1.0
+    @State private var showSpinner = false
+
+    private let tickTimer = Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()
+
+    var body: some View {
+        Group {
+            if showSpinner {
+                ProgressView()
+                    .controlSize(.small)
+                    .scaleEffect(0.7)
+            } else {
+                ZStack {
+                    Circle()
+                        .stroke(Color.secondary.opacity(0.2), lineWidth: 1.5)
+                    PieSlice(fraction: fraction)
+                        .fill(Color.secondary.opacity(0.4))
+                }
+            }
+        }
+        .frame(width: 12, height: 12)
+        .onReceive(tickTimer) { _ in
+            updateFraction()
+        }
+        .onAppear {
+            updateFraction()
+        }
+    }
+
+    private func updateFraction() {
+        let remaining = nextScanTime.timeIntervalSinceNow
+        if remaining <= 1 {
+            showSpinner = true
+            fraction = 0
+        } else {
+            showSpinner = false
+            fraction = max(0, min(1, remaining / scanInterval))
+        }
+    }
+}
+
+/// A pie slice shape drawn clockwise from 12 o'clock.
+private struct PieSlice: Shape {
+    var fraction: CGFloat
+
+    var animatableData: CGFloat {
+        get { fraction }
+        set { fraction = newValue }
+    }
+
+    func path(in rect: CGRect) -> Path {
+        guard fraction > 0 else { return Path() }
+        let center = CGPoint(x: rect.midX, y: rect.midY)
+        let radius = min(rect.width, rect.height) / 2
+        let startAngle = Angle(degrees: -90)
+        let endAngle = Angle(degrees: -90 - 360 * Double(fraction))
+        var path = Path()
+        path.move(to: center)
+        path.addArc(center: center, radius: radius, startAngle: startAngle, endAngle: endAngle, clockwise: true)
+        path.closeSubpath()
+        return path
+    }
+}
+
 // MARK: - Main Content View
 
 struct ContentView: View {
@@ -114,10 +186,11 @@ struct ContentView: View {
                 .font(.subheadline)
                 .foregroundColor(.secondary)
             Spacer()
-            if let lastScan = monitor.lastScanTime {
-                Text(lastScan, style: .relative)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+            if let nextScan = monitor.nextScanTime {
+                ScanTimerView(
+                    nextScanTime: nextScan,
+                    scanInterval: TimeInterval(monitor.scanIntervalSeconds)
+                )
             }
         }
         .padding(.horizontal, 12)

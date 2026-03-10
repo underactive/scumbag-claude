@@ -56,6 +56,7 @@ class MonitorService: ObservableObject {
     @Published var totalFileCount: Int = 0
     @Published var status: MonitorStatus = .normal
     @Published var lastScanTime: Date?
+    @Published var nextScanTime: Date?
     @Published var isScanning = false
     @Published var lastDeleteError: String?
     @Published var notificationsDenied: Bool = false
@@ -130,7 +131,7 @@ class MonitorService: ObservableObject {
         let rawCritical = defaults.object(forKey: SettingsKey.criticalThresholdMB) as? Int ?? 500
         self.criticalThresholdMB = min(max(rawCritical, 50), 1000000)
 
-        let rawInterval = defaults.object(forKey: SettingsKey.scanIntervalSeconds) as? Int ?? 30
+        let rawInterval = defaults.object(forKey: SettingsKey.scanIntervalSeconds) as? Int ?? 15
         self.scanIntervalSeconds = min(max(rawInterval, 5), 300)
 
         let rawStale = defaults.object(forKey: SettingsKey.staleDaysThreshold) as? Int ?? 7
@@ -263,6 +264,7 @@ class MonitorService: ObservableObject {
     private func startTimer() {
         timer?.invalidate()
         let interval = TimeInterval(scanIntervalSeconds)
+        nextScanTime = Date().addingTimeInterval(interval)
         let newTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.scan()
@@ -331,6 +333,7 @@ class MonitorService: ObservableObject {
         totalSize = projects.reduce(0) { $0 + $1.totalSize }
         totalFileCount = projects.reduce(0) { $0 + $1.files.count }
         lastScanTime = Date()
+        nextScanTime = Date().addingTimeInterval(TimeInterval(scanIntervalSeconds))
 
         // Prune notifiedPaths to only contain paths that still exist
         notifiedPaths.formIntersection(currentPaths)
