@@ -60,8 +60,8 @@ Six-file SwiftUI app using a custom `NSStatusItem` for menubar integration.
 
 #### 3. Settings / Configuration Storage
 ```swift
-warningThresholdMB: Int     // default: 100, range: 10...10000
-criticalThresholdMB: Int    // default: 500, range: 50...50000
+warningThresholdMB: Int     // default: 100, range: 10...1000000
+criticalThresholdMB: Int    // default: 500, range: 50...1000000
 scanIntervalSeconds: Int    // default: 30, range: 5...300
 staleDaysThreshold: Int     // default: 7, range: 1...90
 notificationsEnabled: Bool  // default: true
