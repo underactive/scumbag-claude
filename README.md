@@ -38,7 +38,7 @@ Claude Code writes task output to `/private/tmp/claude-*/` directories. These `.
 ### Quick start
 
 ```bash
-git clone https://github.com/esison/scumbag-claude.git
+git clone https://github.com/underactive/scumbag-claude.git
 cd scumbag-claude
 make install
 ```
