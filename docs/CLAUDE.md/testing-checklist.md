@@ -79,6 +79,15 @@
 - [ ] Orange and red icons remain their color regardless of light/dark mode
 - [ ] If MenuBarIcon.png resource is missing, a fallback SF Symbol icon appears
 
+## Footer Button Styling
+- [ ] Settings, Clean All, Quit, and Confirm/Cancel buttons render as bordered macOS-native buttons (not plain text)
+- [ ] Clean All button has orange tint
+- [ ] Confirm button (for Clean All) has red tint
+- [ ] Cancel button uses default system tint
+- [ ] All footer buttons are small control size
+- [ ] Footer buttons (bordered) visually contrast with inline project/file confirm/cancel buttons (plain) intentionally and consistently
+- [ ] Footer does not overflow horizontally when Clean All confirmation buttons are visible alongside Settings and Quit
+
 ## Notifications
 - [ ] Warning notification fires when a file crosses the warning threshold
 - [ ] Critical notification fires when a file crosses the critical threshold

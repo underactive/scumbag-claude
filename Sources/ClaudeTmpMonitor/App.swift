@@ -127,6 +127,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             popover.show(relativeTo: sender.bounds, of: sender, preferredEdge: .minY)
             NSApp.activate(ignoringOtherApps: true)
+            popover.contentViewController?.view.window?.makeKey()
         }
     }
 
