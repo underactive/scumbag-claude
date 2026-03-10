@@ -48,8 +48,9 @@
 
 ## Right-Click Menu
 - [ ] Right-clicking the menubar icon shows a context menu
-- [ ] Context menu contains "About Scumbag Claude" and "Quit"
+- [ ] Context menu contains "About Scumbag Claude", "Check for Updates...", and "Quit"
 - [ ] "About Scumbag Claude" opens the About dialog
+- [ ] "Check for Updates..." checks GitHub API and opens popover to show result
 - [ ] "Quit" terminates the application
 
 ## About Dialog
@@ -91,6 +92,27 @@
 - [ ] All footer buttons are small control size
 - [ ] Footer buttons (bordered) visually contrast with inline project/file confirm/cancel buttons (plain) intentionally and consistently
 - [ ] Footer does not overflow horizontally when Clean All confirmation buttons are visible alongside Settings and Quit
+
+## Auto-Update
+- [ ] On launch, auto-check triggers if enough time has passed since last check (24h default)
+- [ ] "Check for Updates..." in right-click menu checks GitHub and shows result in popover
+- [ ] When an update is available, blue-tinted banner appears between projects and footer
+- [ ] "Update" button in banner starts download with progress bar
+- [ ] "Cancel" button during download cancels and cleans up temp files
+- [ ] After download completes, "Ready to install" banner appears with "Install & Restart" button
+- [ ] Dismiss (X) button hides the banner and persists dismissed version across popover open/close
+- [ ] Dismissed version does not re-show banner until a newer version is released
+- [ ] When up to date (no newer release), popover shows ".upToDate" status briefly
+- [ ] Network errors during manual check show error message with "Retry" button
+- [ ] Network errors during automatic check fail silently (status stays .idle)
+- [ ] "Check for updates automatically" toggle in Settings persists preference
+- [ ] Disabling auto-check stops the periodic timer
+- [ ] Re-enabling auto-check restarts the periodic timer
+- [ ] About dialog shows "Update v{x.y.z} available" when update is available
+- [ ] About dialog shows "Up to date" in green when up to date
+- [ ] About dialog shows spinner + "Checking..." during check
+- [ ] Running from dev build (swift run) shows "update manually" error instead of attempting install
+- [ ] Install flow: app terminates, shell script replaces bundle, clears quarantine, relaunches
 
 ## Notifications
 - [ ] Warning notification fires when a file crosses the warning threshold

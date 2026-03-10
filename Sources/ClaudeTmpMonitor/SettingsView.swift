@@ -2,6 +2,7 @@ import SwiftUI
 
 struct SettingsView: View {
     @EnvironmentObject var monitor: MonitorService
+    @EnvironmentObject var updateService: UpdateService
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -30,6 +31,9 @@ struct SettingsView: View {
             }
 
             Toggle("Launch at Login", isOn: $monitor.launchAtLogin)
+                .font(.subheadline)
+
+            Toggle("Check for updates automatically", isOn: $updateService.checkForUpdatesAutomatically)
                 .font(.subheadline)
         }
         .padding(20)

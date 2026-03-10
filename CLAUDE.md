@@ -4,7 +4,7 @@
 
 **Scumbag Claude** (aka Claude Tmp Monitor) is a macOS menubar application that monitors Claude Code's temporary file directories (`/private/tmp/claude-*/`) for large `.output` files and stale task directories, alerting the user and providing quick cleanup actions.
 
-**Current Version:** 0.2.1
+**Current Version:** 0.3.0
 **Status:** In development
 
 ---
@@ -18,13 +18,14 @@ Not applicable — this is a software-only macOS application.
 ## Architecture
 
 ### Core Files
-Five-file SwiftUI app using a custom `NSStatusItem` for menubar integration.
+Six-file SwiftUI app using a custom `NSStatusItem` for menubar integration.
 
-- `Sources/ClaudeTmpMonitor/App.swift` - Entry point: `@main` SwiftUI App with `NSApplicationDelegateAdaptor`. `AppDelegate` owns `MonitorService`, creates `NSStatusItem` with `NSPopover` (left-click) and `NSMenu` (right-click). Manages singleton `NSWindow` instances for Settings and About dialogs. Uses `Combine` subscriber on `monitor.$status` + `monitor.$totalSize` to reactively update menubar icon and title. Loads menubar icon from `Bundle.module` resources.
+- `Sources/ClaudeTmpMonitor/App.swift` - Entry point: `@main` SwiftUI App with `NSApplicationDelegateAdaptor`. `AppDelegate` owns `MonitorService` and `UpdateService`, creates `NSStatusItem` with `NSPopover` (left-click) and `NSMenu` (right-click). Manages singleton `NSWindow` instances for Settings and About dialogs. Uses `Combine` subscriber on `monitor.$status` + `monitor.$totalSize` to reactively update menubar icon and title. Loads menubar icon from `Bundle.module` resources.
 - `Sources/ClaudeTmpMonitor/MonitorService.swift` - Core business logic: models (`MonitoredFile`, `ClaudeProject`, `MonitorStatus`), scanning, settings persistence, notifications, deletion
-- `Sources/ClaudeTmpMonitor/ContentView.swift` - Main popover view: header, status bar, expandable projects list, footer with Settings button, Clean All, and Quit. Receives `onOpenSettings` closure from `AppDelegate`. Defines `HoverButtonStyle` (custom `ButtonStyle` with configurable hover color) used by icon-only buttons.
+- `Sources/ClaudeTmpMonitor/UpdateService.swift` - Auto-update logic: GitHub releases API checking, download with progress, self-replacement via shell script, version comparison. Persists settings via UserDefaults.
+- `Sources/ClaudeTmpMonitor/ContentView.swift` - Main popover view: header, status bar, expandable projects list, update banner, footer with Settings button, Clean All, and Quit. Receives `onOpenSettings` closure from `AppDelegate`. Defines `HoverButtonStyle` (custom `ButtonStyle` with configurable hover color) used by icon-only buttons.
 - `Sources/ClaudeTmpMonitor/SettingsView.swift` - Settings dialog: threshold/interval rows, notifications toggle, launch at login toggle. Hosted in a separate `NSWindow`.
-- `Sources/ClaudeTmpMonitor/AboutView.swift` - About dialog: app icon, name, version, GitHub link. Hosted in a separate `NSWindow`.
+- `Sources/ClaudeTmpMonitor/AboutView.swift` - About dialog: app icon, name, version, update status, GitHub link. Hosted in a separate `NSWindow`.
 
 ### Dependencies
 - SwiftUI (views, `NSHostingController` for window content)
@@ -33,6 +34,7 @@ Five-file SwiftUI app using a custom `NSStatusItem` for menubar integration.
 - AppKit (`NSStatusItem`, `NSPopover`, `NSMenu`, `NSWindow`, `NSImage` for menubar integration)
 - Combine (`combineLatest`, `sink` for reactive menubar icon updates)
 - ServiceManagement (`SMAppService` for launch-at-login)
+- URLSession (async `data(from:)` and `download(from:)` for GitHub API and update downloads)
 
 ### Key Subsystems
 
@@ -67,6 +69,9 @@ showSizeInMenuBar: Bool     // default: true
 launchAtLogin: Bool         // reads from SMAppService.mainApp.status
 lastDeleteError: String?    // surfaced in footer when non-nil
 notificationsDenied: Bool   // true when system notification permission is denied
+checkForUpdatesAutomatically: Bool // default: true (in UpdateService)
+lastUpdateCheckTime: Date?  // epoch stored in UserDefaults (in UpdateService)
+dismissedUpdateVersion: String? // skip showing banner for this version (in UpdateService)
 ```
 - Saved to `UserDefaults` via `@Published var` with `didSet` persistence pattern
 - Default values loaded in `MonitorService.init()` using `defaults.object(forKey:) as? Type ?? fallback`
@@ -83,8 +88,19 @@ notificationsDenied: Bool   // true when system notification permission is denie
 - Deletion errors are surfaced via `lastDeleteError` published property, shown in the footer
 - No communication protocol — all operations are local filesystem
 
+#### 5. Auto-Update (UpdateService)
+- Periodically checks `https://api.github.com/repos/underactive/scumbag-claude/releases/latest` (default: once per day)
+- Compares remote `tag_name` (stripped of leading "v") against `CFBundleShortVersionString` using semantic version comparison
+- States: `.idle` → `.checking` → `.available(version, downloadURL, releaseNotes)` / `.upToDate` / `.error(msg)`
+- Download flow: `.available` → `.downloading(progress)` → `.readyToInstall(appPath)` → `.installing`
+- Downloads zip to temp directory, extracts with `/usr/bin/ditto -xk`, verifies `.app` bundle exists
+- Self-replacement: writes a bash script that waits for current process to exit, replaces the `.app` bundle, clears quarantine (`xattr -cr`), and relaunches
+- Pre-checks `Bundle.main.bundlePath` for `.app` suffix and write permissions; shows manual update message for dev builds
+- Users can dismiss a version (persisted as `dismissedUpdateVersion`); dismissed versions don't show the banner
+- UI: update banner in popover between projects and footer, "Check for Updates..." in right-click menu, update status in About dialog, auto-check toggle in Settings
+
 ### Data Flow
-`MonitorService` is created and owned by `AppDelegate`. It is passed to `ContentView` (popover) and `SettingsView` (dialog) via `.environmentObject()`. All state mutations happen on `@MainActor`. The timer callback dispatches back to `@MainActor` via `Task`. Menubar icon/title updates are driven by a `Combine` subscriber on `monitor.$status`, `monitor.$totalSize`, and `monitor.$showSizeInMenuBar`.
+`MonitorService` and `UpdateService` are created and owned by `AppDelegate`. Both are passed to `ContentView` (popover), `SettingsView` (dialog), and `AboutView` (dialog) via `.environmentObject()`. All state mutations happen on `@MainActor`. Timer callbacks dispatch back to `@MainActor` via `Task`. Menubar icon/title updates are driven by a `Combine` subscriber on `monitor.$status`, `monitor.$totalSize`, and `monitor.$showSizeInMenuBar`.
 
 ---
 
@@ -128,6 +144,9 @@ No external services or third-party SDKs. All operations are local filesystem an
 2. **No auto-cleanup** — Settings exist for thresholds but auto-deletion is not yet implemented.
 3. **Hardcoded skip words in `extractProjectName`** — The display name extractor has a hardcoded `skipWords` set (`Users`, `Development`, `personal`, `hardware`, `esison`) that won't work for other users.
 4. **No TOCTOU protection on delete** — Symlink targets are not re-resolved at delete time. A symlink could be retargeted between scan and delete. Deferred to separate plan.
+5. **Gatekeeper quarantine on auto-update** — Downloaded update may trigger Gatekeeper re-validation. Mitigated by `xattr -cr` in the updater script, but users may see a brief security prompt.
+6. **No delta updates** — Auto-update downloads the full zip archive every time. No binary diff/patch mechanism.
+7. **No checksum verification on updates** — Downloaded zip is not verified against a SHA256 hash. Relies on HTTPS transport security.
 
 ---
 
@@ -277,6 +296,11 @@ Version string appears in 2 files:
 1. Modify `scan()` in `MonitorService.swift` to include the new pattern
 2. Update the monitored directory structure in CLAUDE.md Architecture > File Monitoring
 
+### Change the GitHub repository URL for updates
+1. Update `githubAPIURL` in `UpdateService.swift`
+2. Update `githubURL` in `AboutView.swift`
+3. Update any references in CLAUDE.md
+
 ---
 
 ## File Inventory
@@ -286,7 +310,8 @@ Version string appears in 2 files:
 | `Package.swift` | SPM package definition (macOS 13+, swift-tools-version 5.9) |
 | `Sources/ClaudeTmpMonitor/App.swift` | `@main` entry, `AppDelegate` with `NSStatusItem`, popover, right-click menu, Settings/About windows |
 | `Sources/ClaudeTmpMonitor/MonitorService.swift` | Monitoring logic, models, settings, notifications |
-| `Sources/ClaudeTmpMonitor/ContentView.swift` | Main popover view (header, status, projects, footer) |
+| `Sources/ClaudeTmpMonitor/UpdateService.swift` | Auto-update: GitHub releases API check, download, self-replacement |
+| `Sources/ClaudeTmpMonitor/ContentView.swift` | Main popover view (header, status, projects, update banner, footer) |
 | `Sources/ClaudeTmpMonitor/SettingsView.swift` | Settings dialog view |
 | `Sources/ClaudeTmpMonitor/AboutView.swift` | About dialog view |
 | `Sources/ClaudeTmpMonitor/Resources/` | `MenuBarIcon.png`, `MenuBarIcon@2x.png`, `AppIcon.icns` |
