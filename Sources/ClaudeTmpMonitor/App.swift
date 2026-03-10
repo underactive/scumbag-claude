@@ -12,13 +12,13 @@ struct ClaudeTmpMonitorApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var monitor = MonitorService()
 
-    private var menuBarImage: NSImage? {
+    private static let cachedMenuBarImage: NSImage? = {
         guard let url = Bundle.module.url(forResource: "MenuBarIcon", withExtension: "png"),
               let img = NSImage(contentsOf: url) else { return nil }
         img.size = NSSize(width: 18, height: 18)
         img.isTemplate = true
         return img
-    }
+    }()
 
     var body: some Scene {
         MenuBarExtra {
@@ -26,7 +26,7 @@ struct ClaudeTmpMonitorApp: App {
                 .environmentObject(monitor)
         } label: {
             HStack(spacing: 4) {
-                if let img = menuBarImage {
+                if let img = Self.cachedMenuBarImage {
                     Image(nsImage: img)
                 } else {
                     Image(systemName: monitor.statusIcon)
@@ -36,6 +36,7 @@ struct ClaudeTmpMonitorApp: App {
                         .font(.caption)
                 }
             }
+            .accessibilityLabel("Scumbag Claude status")
         }
         .menuBarExtraStyle(.window)
     }

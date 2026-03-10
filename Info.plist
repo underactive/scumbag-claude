@@ -9,9 +9,11 @@
     <key>CFBundleIdentifier</key>
     <string>com.esison.claude-tmp-monitor</string>
     <key>CFBundleVersion</key>
-    <string>0.1.0</string>
+    <string>0.2.0</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.1.0</string>
+    <string>0.2.0</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleExecutable</key>
@@ -22,7 +24,7 @@
     <string>13.0</string>
     <key>LSUIElement</key>
     <true/>
-    <key>NSUserNotificationAlertStyle</key>
-    <string>alert</string>
+    <key>NSPrincipalClass</key>
+    <string>NSApplication</string>
 </dict>
 </plist>
