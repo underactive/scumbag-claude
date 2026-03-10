@@ -77,15 +77,17 @@ class UpdateService: ObservableObject {
 
         isInitializing = false
 
-        if checkForUpdatesAutomatically {
-            startTimer()
-            let shouldCheck = lastCheckTime.map { Date().timeIntervalSince($0) >= updateCheckInterval } ?? true
-            if shouldCheck {
-                Task { @MainActor in
-                    await checkForUpdates(manual: false)
-                }
-            }
-        }
+        // Auto-update disabled until release builds are code-signed and notarized.
+        // See feature/codesign-notarize branch. Re-enable by uncommenting below.
+        // if checkForUpdatesAutomatically {
+        //     startTimer()
+        //     let shouldCheck = lastCheckTime.map { Date().timeIntervalSince($0) >= updateCheckInterval } ?? true
+        //     if shouldCheck {
+        //         Task { @MainActor in
+        //             await checkForUpdates(manual: false)
+        //         }
+        //     }
+        // }
     }
 
     deinit {
@@ -95,6 +97,13 @@ class UpdateService: ObservableObject {
     // MARK: - Public Methods
 
     func checkForUpdates(manual: Bool) async {
+        // Auto-update disabled until release builds are code-signed and notarized.
+        if manual {
+            status = .error("Updates are disabled until code signing is configured.")
+            return
+        }
+        return
+
         guard status != .checking else { return }
         status = .checking
 

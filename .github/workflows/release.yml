@@ -1,9 +1,9 @@
+# Disabled until Developer ID code signing is configured.
+# See feature/codesign-notarize branch.
 name: Release
 
 on:
-  push:
-    tags:
-      - 'v*'
+  workflow_dispatch:
 
 jobs:
   build-and-release:
