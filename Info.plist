@@ -9,9 +9,9 @@
     <key>CFBundleIdentifier</key>
     <string>com.esison.claude-tmp-monitor</string>
     <key>CFBundleVersion</key>
-    <string>0.3.3</string>
+    <string>0.3.4</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.3.3</string>
+    <string>0.3.4</string>
     <key>CFBundleInfoDictionaryVersion</key>
     <string>6.0</string>
     <key>CFBundlePackageType</key>
