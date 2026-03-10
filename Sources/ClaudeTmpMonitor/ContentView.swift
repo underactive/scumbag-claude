@@ -12,9 +12,9 @@ enum DeleteConfirmation: Equatable {
 
 struct ContentView: View {
     @EnvironmentObject var monitor: MonitorService
-    @State private var showSettings = false
     @State private var expandedProjects: Set<String> = []
     @State private var confirmDelete: DeleteConfirmation? = nil
+    var onOpenSettings: () -> Void = {}
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -30,15 +30,10 @@ struct ContentView: View {
             }
 
             Divider()
-
-            if showSettings {
-                settingsSection
-                Divider()
-            }
-
             footerSection
         }
         .frame(width: 380)
+        .onAppear { confirmDelete = nil }
     }
 
     // MARK: - Header
@@ -204,13 +199,13 @@ struct ContentView: View {
     private func filesSection(for project: ClaudeProject) -> some View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(project.files) { file in
-                fileRow(file, projectDisplayName: project.displayName)
+                fileRow(file)
             }
         }
         .padding(.leading, 24)
     }
 
-    private func fileRow(_ file: MonitoredFile, projectDisplayName: String) -> some View {
+    private func fileRow(_ file: MonitoredFile) -> some View {
         HStack(spacing: 6) {
             Image(systemName: file.isSymlink ? "link" : "doc")
                 .font(.caption2)
@@ -268,52 +263,6 @@ struct ContentView: View {
         .padding(.vertical, 3)
     }
 
-    // MARK: - Settings
-
-    private var settingsSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Settings")
-                .font(.subheadline.weight(.medium))
-                .padding(.bottom, 2)
-
-            settingRow("Warning threshold", value: $monitor.warningThresholdMB, unit: "MB")
-            settingRow("Critical threshold", value: $monitor.criticalThresholdMB, unit: "MB")
-            settingRow("Scan interval", value: $monitor.scanIntervalSeconds, unit: "sec")
-            settingRow("Stale after", value: $monitor.staleDaysThreshold, unit: "days")
-
-            Toggle("Notifications", isOn: $monitor.notificationsEnabled)
-                .font(.subheadline)
-
-            if monitor.notificationsDenied {
-                Text("Notifications are denied in System Settings.")
-                    .font(.caption)
-                    .foregroundColor(.orange)
-            }
-
-            Toggle("Launch at Login", isOn: $monitor.launchAtLogin)
-                .font(.subheadline)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
-    }
-
-    private func settingRow(_ label: String, value: Binding<Int>, unit: String) -> some View {
-        HStack {
-            Text(label)
-                .font(.subheadline)
-                .foregroundColor(.secondary)
-            Spacer()
-            TextField(label, value: value, format: .number)
-                .textFieldStyle(.roundedBorder)
-                .frame(width: 60)
-                .multilineTextAlignment(.trailing)
-            Text(unit)
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .frame(width: 30, alignment: .leading)
-        }
-    }
-
     // MARK: - Footer
 
     private var footerSection: some View {
@@ -328,9 +277,9 @@ struct ContentView: View {
             }
 
             HStack {
-                Button(action: { showSettings.toggle() }) {
+                Button(action: { onOpenSettings() }) {
                     Image(systemName: "gear")
-                    Text(showSettings ? "Hide Settings" : "Settings")
+                    Text("Settings")
                         .font(.subheadline)
                 }
                 .buttonStyle(.plain)

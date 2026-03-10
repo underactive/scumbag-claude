@@ -3,6 +3,11 @@
 ## Core Functionality
 - [ ] App launches as menubar icon (no Dock icon)
 - [ ] Menubar shows icon and size text when tmp files exist
+- [ ] Menubar shows only the icon (no size text) when no tmp files exist
+- [ ] Left-clicking the menubar icon opens the popover panel
+- [ ] Left-clicking the menubar icon again closes the popover
+- [ ] Clicking outside the popover closes it (transient behavior)
+- [ ] Menubar icon and size text update automatically after a background scan completes
 - [ ] Scan runs automatically on configured interval
 - [ ] Manual refresh via Cmd+R or refresh button triggers scan
 - [ ] Projects list shows all detected claude tmp directories
@@ -18,8 +23,9 @@
 - [ ] Clean All deletes all projects and refreshes the list
 - [ ] Deletion errors appear in the footer as red text
 
-## Settings
-- [ ] Cmd+, or gear button toggles settings panel
+## Settings Window
+- [ ] Cmd+, or gear button opens settings in a separate window
+- [ ] Settings window reuses existing window if already open
 - [ ] Warning threshold accepts values between 10-10000 MB
 - [ ] Critical threshold accepts values between 50-50000 MB
 - [ ] Scan interval accepts values between 5-300 seconds
@@ -29,14 +35,31 @@
 - [ ] Notifications toggle enables/disables system notifications
 - [ ] "Notifications are denied" warning appears when system permission is denied
 - [ ] Launch at Login toggle registers/unregisters with SMAppService
+- [ ] Settings changes persist after closing and reopening the window
+- [ ] Settings window opens correctly after being closed and reopened
 
 ## Pluralization
 - [ ] Status bar shows "1 file" (not "1 files") when exactly one file exists
 - [ ] Project row shows "1 file" (not "1 files") when project has exactly one file
 
+## Right-Click Menu
+- [ ] Right-clicking the menubar icon shows a context menu
+- [ ] Context menu contains "About Scumbag Claude" and "Quit"
+- [ ] "About Scumbag Claude" opens the About dialog
+- [ ] "Quit" terminates the application
+
+## About Dialog
+- [ ] About dialog shows app icon
+- [ ] About dialog shows "Scumbag Claude" title
+- [ ] About dialog shows version number
+- [ ] About dialog shows GitHub link
+- [ ] Clicking GitHub link opens browser to the repository
+- [ ] About dialog reuses existing window if already open
+- [ ] About dialog opens correctly after being closed and reopened
+
 ## Keyboard Shortcuts
 - [ ] Cmd+R refreshes the scan
-- [ ] Cmd+, toggles settings
+- [ ] Cmd+, opens the settings window
 - [ ] Cmd+Q quits the application
 
 ## Accessibility

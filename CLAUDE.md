@@ -18,17 +18,20 @@ Not applicable — this is a software-only macOS application.
 ## Architecture
 
 ### Core Files
-Three-file SwiftUI app using `MenuBarExtra` for menubar integration.
+Five-file SwiftUI app using a custom `NSStatusItem` for menubar integration.
 
-- `Sources/ClaudeTmpMonitor/App.swift` - Entry point: `@main` SwiftUI App with `MenuBarExtra` (`.window` style). Uses `NSApplicationDelegateAdaptor` to set `.accessory` activation policy (hides Dock icon). Loads menubar icon from `Bundle.module` resources.
+- `Sources/ClaudeTmpMonitor/App.swift` - Entry point: `@main` SwiftUI App with `NSApplicationDelegateAdaptor`. `AppDelegate` owns `MonitorService`, creates `NSStatusItem` with `NSPopover` (left-click) and `NSMenu` (right-click). Manages singleton `NSWindow` instances for Settings and About dialogs. Uses `Combine` subscriber on `monitor.$status` + `monitor.$totalSize` to reactively update menubar icon and title. Loads menubar icon from `Bundle.module` resources.
 - `Sources/ClaudeTmpMonitor/MonitorService.swift` - Core business logic: models (`MonitoredFile`, `ClaudeProject`, `MonitorStatus`), scanning, settings persistence, notifications, deletion
-- `Sources/ClaudeTmpMonitor/ContentView.swift` - All SwiftUI views: header, status bar, expandable projects list, settings panel, footer with Clean All and Quit
+- `Sources/ClaudeTmpMonitor/ContentView.swift` - Main popover view: header, status bar, expandable projects list, footer with Settings button, Clean All, and Quit. Receives `onOpenSettings` closure from `AppDelegate`.
+- `Sources/ClaudeTmpMonitor/SettingsView.swift` - Settings dialog: threshold/interval rows, notifications toggle, launch at login toggle. Hosted in a separate `NSWindow`.
+- `Sources/ClaudeTmpMonitor/AboutView.swift` - About dialog: app icon, name, version, GitHub link. Hosted in a separate `NSWindow`.
 
 ### Dependencies
-- SwiftUI (`MenuBarExtra` for menubar integration)
+- SwiftUI (views, `NSHostingController` for window content)
 - Foundation (`FileManager` for directory scanning, `Timer` for polling)
 - UserNotifications (`UNUserNotificationCenter` for system alerts)
-- AppKit (`NSApp.setActivationPolicy`, `NSImage` for menubar icon)
+- AppKit (`NSStatusItem`, `NSPopover`, `NSMenu`, `NSWindow`, `NSImage` for menubar integration)
+- Combine (`combineLatest`, `sink` for reactive menubar icon updates)
 - ServiceManagement (`SMAppService` for launch-at-login)
 
 ### Key Subsystems
@@ -51,7 +54,7 @@ Three-file SwiftUI app using `MenuBarExtra` for menubar integration.
 - Three states: Normal (green), Warning (orange), Critical (red)
 - Status determined by largest individual file size OR total size vs thresholds
 - Tracks `notifiedPaths: Set<String>` — each file triggers a system notification only once per threshold crossing
-- Menubar icon changes to reflect current status
+- Menubar icon changes color to reflect current status (via Combine subscriber)
 
 #### 3. Settings / Configuration Storage
 ```swift
@@ -80,7 +83,7 @@ notificationsDenied: Bool   // true when system notification permission is denie
 - No communication protocol — all operations are local filesystem
 
 ### Data Flow
-`MonitorService` is created as `@StateObject` in `App.swift` and passed to `ContentView` via `.environmentObject()`. All state mutations happen on `@MainActor`. The timer callback dispatches back to `@MainActor` via `Task`.
+`MonitorService` is created and owned by `AppDelegate`. It is passed to `ContentView` (popover) and `SettingsView` (dialog) via `.environmentObject()`. All state mutations happen on `@MainActor`. The timer callback dispatches back to `@MainActor` via `Task`. Menubar icon/title updates are driven by a `Combine` subscriber on `monitor.$status` and `monitor.$totalSize`.
 
 ---
 
@@ -280,9 +283,11 @@ Version string appears in 2 files:
 | File / Directory | Purpose |
 |------------------|---------|
 | `Package.swift` | SPM package definition (macOS 13+, swift-tools-version 5.9) |
-| `Sources/ClaudeTmpMonitor/App.swift` | `@main` entry, `MenuBarExtra` scene |
+| `Sources/ClaudeTmpMonitor/App.swift` | `@main` entry, `AppDelegate` with `NSStatusItem`, popover, right-click menu, Settings/About windows |
 | `Sources/ClaudeTmpMonitor/MonitorService.swift` | Monitoring logic, models, settings, notifications |
-| `Sources/ClaudeTmpMonitor/ContentView.swift` | All SwiftUI views |
+| `Sources/ClaudeTmpMonitor/ContentView.swift` | Main popover view (header, status, projects, footer) |
+| `Sources/ClaudeTmpMonitor/SettingsView.swift` | Settings dialog view |
+| `Sources/ClaudeTmpMonitor/AboutView.swift` | About dialog view |
 | `Sources/ClaudeTmpMonitor/Resources/` | `MenuBarIcon.png`, `MenuBarIcon@2x.png`, `AppIcon.icns` |
 | `Info.plist` | App bundle config (`LSUIElement=true`, bundle ID `com.esison.claude-tmp-monitor`) |
 | `Makefile` | Build, bundle, install, run, clean targets |
