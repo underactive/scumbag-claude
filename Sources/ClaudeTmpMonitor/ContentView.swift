@@ -8,6 +8,35 @@ enum DeleteConfirmation: Equatable {
     case all
 }
 
+// MARK: - Hover Button Style
+
+/// A plain button style that shows a subtle rounded background on hover.
+/// Used for icon-only buttons (refresh, chevron) that should not look bordered.
+private struct HoverButtonStyle: ButtonStyle {
+    var hoverColor: Color = .primary
+
+    func makeBody(configuration: Configuration) -> some View {
+        HoverButtonBody(configuration: configuration, hoverColor: hoverColor)
+    }
+}
+
+private struct HoverButtonBody: View {
+    let configuration: ButtonStyleConfiguration
+    let hoverColor: Color
+    @State private var isHovered = false
+
+    var body: some View {
+        configuration.label
+            .padding(4)
+            .background(
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(isHovered ? hoverColor.opacity(0.1) : Color.clear)
+            )
+            .opacity(configuration.isPressed ? 0.7 : 1.0)
+            .onHover { isHovered = $0 }
+    }
+}
+
 // MARK: - Main Content View
 
 struct ContentView: View {
@@ -48,7 +77,7 @@ struct ContentView: View {
             Button(action: { monitor.scanNow() }) {
                 Image(systemName: "arrow.clockwise")
             }
-            .buttonStyle(.plain)
+            .buttonStyle(HoverButtonStyle())
             .disabled(monitor.isScanning)
             .accessibilityLabel("Refresh")
             .keyboardShortcut("r", modifiers: .command)
@@ -138,7 +167,7 @@ struct ContentView: View {
                     .foregroundColor(.secondary)
                     .frame(width: 12)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(HoverButtonStyle())
             .accessibilityLabel(expandedProjects.contains(project.id) ? "Collapse project" : "Expand project")
 
             VStack(alignment: .leading, spacing: 1) {
@@ -171,22 +200,23 @@ struct ContentView: View {
             if confirmDelete == .project(project.id) {
                 Button("Cancel") { confirmDelete = nil }
                     .font(.caption)
-                    .buttonStyle(.plain)
-                    .foregroundColor(.secondary)
+                    .buttonStyle(.bordered)
+                    .controlSize(.mini)
                 Button("Delete") {
                     monitor.deleteProject(project)
                     confirmDelete = nil
                 }
                 .font(.caption)
-                .buttonStyle(.plain)
-                .foregroundColor(.red)
+                .buttonStyle(.bordered)
+                .controlSize(.mini)
+                .tint(.red)
             } else {
                 Button(action: { confirmDelete = .project(project.id) }) {
                     Image(systemName: "trash")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(HoverButtonStyle(hoverColor: .red))
                 .accessibilityLabel("Delete project")
             }
         }
@@ -240,22 +270,23 @@ struct ContentView: View {
             if confirmDelete == .file(file.id) {
                 Button("Cancel") { confirmDelete = nil }
                     .font(.caption2)
-                    .buttonStyle(.plain)
-                    .foregroundColor(.secondary)
+                    .buttonStyle(.bordered)
+                    .controlSize(.mini)
                 Button("Delete") {
                     monitor.deleteFile(file)
                     confirmDelete = nil
                 }
                 .font(.caption2)
-                .buttonStyle(.plain)
-                .foregroundColor(.red)
+                .buttonStyle(.bordered)
+                .controlSize(.mini)
+                .tint(.red)
             } else {
                 Button(action: { confirmDelete = .file(file.id) }) {
-                    Image(systemName: "xmark.circle")
+                    Image(systemName: "xmark")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(HoverButtonStyle(hoverColor: .red))
                 .accessibilityLabel("Delete file")
             }
         }
@@ -282,8 +313,6 @@ struct ContentView: View {
                     Text("Settings")
                         .font(.subheadline)
                 }
-                .buttonStyle(.plain)
-                .foregroundColor(.secondary)
                 .accessibilityLabel("Settings")
                 .keyboardShortcut(",", modifiers: .command)
 
@@ -294,31 +323,28 @@ struct ContentView: View {
                         Text("Clean All")
                             .font(.subheadline)
                     }
-                    .buttonStyle(.plain)
-                    .foregroundColor(.orange)
+                    .tint(.orange)
                 }
 
                 if confirmDelete == .all {
                     Button("Cancel") { confirmDelete = nil }
                         .font(.caption)
-                        .buttonStyle(.plain)
                     Button("Confirm") {
                         monitor.deleteAllProjects()
                         confirmDelete = nil
                     }
                     .font(.caption)
-                    .buttonStyle(.plain)
-                    .foregroundColor(.red)
+                    .tint(.red)
                 }
 
                 Button("Quit") {
                     NSApplication.shared.terminate(nil)
                 }
-                .buttonStyle(.plain)
-                .foregroundColor(.secondary)
                 .font(.subheadline)
                 .keyboardShortcut("q", modifiers: .command)
             }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
         }
