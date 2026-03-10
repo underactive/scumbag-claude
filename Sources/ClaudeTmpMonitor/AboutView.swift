@@ -1,7 +1,7 @@
 import SwiftUI
 
 struct AboutView: View {
-    private static let githubURL = URL(string: "https://github.com/esison/scumbag-claude")
+    private static let githubURL = URL(string: "https://github.com/underactive/scumbag-claude")
 
     private var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown"
