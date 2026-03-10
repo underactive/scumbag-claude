@@ -34,6 +34,10 @@
 - [ ] Changing scan interval restarts the timer
 - [ ] Notifications toggle enables/disables system notifications
 - [ ] "Notifications are denied" warning appears when system permission is denied
+- [ ] "Show size in menu bar" toggle shows/hides total size text next to menubar icon
+- [ ] "Show size in menu bar" toggle persists after closing and reopening settings
+- [ ] Toggling "Show size in menu bar" off immediately removes size text from menubar
+- [ ] Toggling "Show size in menu bar" on immediately restores size text in menubar (when files exist)
 - [ ] Launch at Login toggle registers/unregisters with SMAppService
 - [ ] Settings changes persist after closing and reopening the window
 - [ ] Settings window opens correctly after being closed and reopened

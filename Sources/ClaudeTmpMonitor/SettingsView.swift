@@ -17,6 +17,9 @@ struct SettingsView: View {
             Divider()
                 .padding(.vertical, 4)
 
+            Toggle("Show size in menu bar", isOn: $monitor.showSizeInMenuBar)
+                .font(.subheadline)
+
             Toggle("Notifications", isOn: $monitor.notificationsEnabled)
                 .font(.subheadline)
 

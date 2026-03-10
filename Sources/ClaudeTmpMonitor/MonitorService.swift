@@ -10,6 +10,7 @@ enum SettingsKey {
     static let scanIntervalSeconds = "scanIntervalSeconds"
     static let staleDaysThreshold = "staleDaysThreshold"
     static let notificationsEnabled = "notificationsEnabled"
+    static let showSizeInMenuBar = "showSizeInMenuBar"
 }
 
 // MARK: - Models
@@ -90,6 +91,9 @@ class MonitorService: ObservableObject {
     @Published var notificationsEnabled: Bool {
         didSet { UserDefaults.standard.set(notificationsEnabled, forKey: SettingsKey.notificationsEnabled) }
     }
+    @Published var showSizeInMenuBar: Bool {
+        didSet { UserDefaults.standard.set(showSizeInMenuBar, forKey: SettingsKey.showSizeInMenuBar) }
+    }
     @Published var launchAtLogin: Bool {
         didSet {
             guard !isUpdatingLaunchAtLogin else { return }
@@ -130,6 +134,7 @@ class MonitorService: ObservableObject {
         self.staleDaysThreshold = min(max(rawStale, 1), 90)
 
         self.notificationsEnabled = defaults.object(forKey: SettingsKey.notificationsEnabled) as? Bool ?? true
+        self.showSizeInMenuBar = defaults.object(forKey: SettingsKey.showSizeInMenuBar) as? Bool ?? true
         self.launchAtLogin = SMAppService.mainApp.status == .enabled
 
         requestNotificationPermission()
