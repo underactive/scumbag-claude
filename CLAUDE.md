@@ -96,6 +96,7 @@ dismissedUpdateVersion: String? // skip showing banner for this version (in Upda
 - Downloads zip to temp directory, extracts with `/usr/bin/ditto -xk`, verifies `.app` bundle exists
 - Self-replacement: writes a bash script that waits for current process to exit, replaces the `.app` bundle, clears quarantine (`xattr -cr`), and relaunches
 - Pre-checks `Bundle.main.bundlePath` for `.app` suffix and write permissions; shows manual update message for dev builds
+- Release builds are code-signed with a Developer ID certificate and notarized by Apple, so downloads open without Gatekeeper warnings
 - Users can dismiss a version (persisted as `dismissedUpdateVersion`); dismissed versions don't show the banner
 - UI: update banner in popover between projects and footer, "Check for Updates..." in right-click menu, update status in About dialog, auto-check toggle in Settings
 
@@ -119,6 +120,14 @@ dismissedUpdateVersion: String? // skip showing banner for this version (in Upda
 ### Environment Variables
 
 No environment variables are used. All configuration is runtime via `UserDefaults`.
+
+### GitHub Actions Secrets (for release workflow)
+- `DEVELOPER_ID_P12` — base64-encoded `.p12` export of the "Developer ID Application" certificate + private key
+- `P12_PASSWORD` — password used when exporting the `.p12`
+- `SIGNING_IDENTITY` — full signing identity string (e.g., `"Developer ID Application: Your Name (TEAMID)"`)
+- `APPLE_ID` — Apple ID email used for notarization
+- `APP_SPECIFIC_PASSWORD` — app-specific password from appleid.apple.com
+- `TEAM_ID` — 10-character Apple Developer Team ID
 
 ---
 
@@ -144,9 +153,8 @@ No external services or third-party SDKs. All operations are local filesystem an
 2. **No auto-cleanup** — Settings exist for thresholds but auto-deletion is not yet implemented.
 3. **Hardcoded skip words in `extractProjectName`** — The display name extractor has a hardcoded `skipWords` set (`Users`, `Development`, `personal`, `hardware`, `esison`) that won't work for other users.
 4. **No TOCTOU protection on delete** — Symlink targets are not re-resolved at delete time. A symlink could be retargeted between scan and delete. Deferred to separate plan.
-5. **Gatekeeper quarantine on auto-update** — Downloaded update may trigger Gatekeeper re-validation. Mitigated by `xattr -cr` in the updater script, but users may see a brief security prompt.
-6. **No delta updates** — Auto-update downloads the full zip archive every time. No binary diff/patch mechanism.
-7. **No checksum verification on updates** — Downloaded zip is not verified against a SHA256 hash. Relies on HTTPS transport security.
+5. **No delta updates** — Auto-update downloads the full zip archive every time. No binary diff/patch mechanism.
+6. **No checksum verification on updates** — Downloaded zip is not verified against a SHA256 hash. Relies on HTTPS transport security.
 
 ---
 
