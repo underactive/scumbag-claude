@@ -21,9 +21,9 @@ Not applicable — this is a software-only macOS application.
 Six-file SwiftUI app using a custom `NSStatusItem` for menubar integration.
 
 - `Sources/ClaudeTmpMonitor/App.swift` - Entry point: `@main` SwiftUI App with `NSApplicationDelegateAdaptor`. `AppDelegate` owns `MonitorService` and `UpdateService`, creates `NSStatusItem` with `NSPopover` (left-click) and `NSMenu` (right-click). Manages singleton `NSWindow` instances for Settings and About dialogs. Uses `Combine` subscriber on `monitor.$status` + `monitor.$totalSize` to reactively update menubar icon and title. Loads menubar icon from `Bundle.module` resources.
-- `Sources/ClaudeTmpMonitor/MonitorService.swift` - Core business logic: models (`MonitoredFile`, `ClaudeProject`, `MonitorStatus`), FSEvents + timer-based scanning, growth rate tracking, settings persistence, notifications, deletion
+- `Sources/ClaudeTmpMonitor/MonitorService.swift` - Core business logic: models (`MonitoredFile`, `ClaudeProject`, `MonitorStatus`), FSEvents + timer-based scanning, growth rate tracking, symlink scope/deduplication visibility, settings persistence, notifications, deletion
 - `Sources/ClaudeTmpMonitor/UpdateService.swift` - Auto-update logic: GitHub releases API checking, download with progress, self-replacement via shell script, version comparison. Persists settings via UserDefaults.
-- `Sources/ClaudeTmpMonitor/ContentView.swift` - Main popover view: header, status bar, expandable projects list, update banner, footer with Settings button, Clean All, and Quit. Receives `onOpenSettings` closure from `AppDelegate`. Defines `HoverButtonStyle` (custom `ButtonStyle` with configurable hover color) used by icon-only buttons.
+- `Sources/ClaudeTmpMonitor/ContentView.swift` - Main popover view: header, status bar, expandable projects list with symlink scope/deduplication badges and broken symlink counts, update banner, footer with Settings button, Clean Broken, Clean All, and Quit. Receives `onOpenSettings` closure from `AppDelegate`. Defines `HoverButtonStyle` (custom `ButtonStyle` with configurable hover color) used by icon-only buttons.
 - `Sources/ClaudeTmpMonitor/SettingsView.swift` - Settings dialog: threshold/interval rows, notifications toggle, launch at login toggle. Hosted in a separate `NSWindow`.
 - `Sources/ClaudeTmpMonitor/AboutView.swift` - About dialog: app icon, name, version, update status, GitHub link. Hosted in a separate `NSWindow`.
 
@@ -54,6 +54,9 @@ Six-file SwiftUI app using a custom `NSStatusItem` for menubar integration.
 ```
 - `.output` files may be symlinks to `~/.claude/projects/.../subagents/agent-*.jsonl` or actual files that grow unbounded
 - **Growth rate tracking**: Compares file sizes across successive scans via `previousSizes: [String: (size: UInt64, time: Date)]` (keyed by resolved path). Computes `growthRate` (bytes/sec) per file; `ClaudeProject.growthRate` is the sum of its files' rates. UI shows "↑ X.X MB/min" indicators on project and file rows for actively growing files. `formatGrowthRate()` converts bytes/sec to KB/min, MB/min, or GB/min.
+- **Symlink scope visibility**: Each `MonitoredFile` has `isTargetInScope: Bool` indicating whether its symlink target is within the allowed deletion scope (`/private/tmp/claude-*` or `~/.claude/projects/`). Non-symlinks and broken symlinks are always in scope. Out-of-scope symlinks show a "link only" pill badge in the UI, indicating that deletion removes only the symlink entry, not the target file.
+- **Deduplication visibility**: After scanning all projects, `scan()` builds a global `resolvedPath → count` frequency map. Files sharing the same resolved path get `duplicateCount > 1`. The UI shows a "×N" badge in blue when multiple symlinks point to the same target, with a tooltip explaining that size is counted once.
+- **Broken symlink cleanup**: `ClaudeProject.brokenSymlinkCount` counts broken symlinks per project (shown in subtitle). `deleteBrokenSymlinks()` removes all broken symlink entries globally. `deleteBrokenSymlinksInProject(_:)` scopes cleanup to a single project. The footer shows a "Clean Broken (N)" button when broken symlinks exist.
 
 #### 2. Status & Notifications
 - Three states: Normal (green), Warning (orange), Critical (red)
@@ -87,6 +90,7 @@ dismissedUpdateVersion: String? // skip showing banner for this version (in Upda
 - Deleting a file: validates symlink target scope, removes target if allowed, then removes the symlink/file entry itself
 - Deleting a project: validates each symlink target, removes allowed targets, then removes the entire project directory via `removeItem(atPath:)`
 - Batch deletion: `deleteAllProjects()` deletes all projects and scans once at the end (not per-project)
+- Broken symlink cleanup: `deleteBrokenSymlinks()` removes all dangling symlink entries globally; `deleteBrokenSymlinksInProject(_:)` scopes to one project. Only removes the symlink file itself (no target exists).
 - UI uses inline confirm/cancel buttons (tracked by `DeleteConfirmation` enum in ContentView)
 - Deletion errors are surfaced via `lastDeleteError` published property, shown in the footer
 - No communication protocol — all operations are local filesystem

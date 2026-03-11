@@ -130,6 +130,28 @@
 - [ ] Project growth rate is the sum of its individual file growth rates
 - [ ] Growth rate units scale appropriately (KB/min, MB/min, GB/min)
 
+## Symlink Scope Indicators
+- [ ] Symlinks with in-scope targets (under /private/tmp/claude-* or ~/.claude/projects/) show normal "→ filename" subtitle
+- [ ] Symlinks with out-of-scope targets show "link only" purple pill badge next to the arrow subtitle
+- [ ] Non-symlink files do not show any scope indicator
+- [ ] Broken symlinks do not show a scope indicator (they show "broken symlink" in red instead)
+
+## Deduplication Visibility
+- [ ] Files with unique resolved paths show no duplicate badge
+- [ ] When multiple symlinks point to the same resolved file, each shows a blue "×N" badge next to the filename
+- [ ] Hovering the "×N" badge shows a tooltip explaining that size is counted once
+- [ ] Broken symlinks are excluded from duplicate counting
+
+## Broken Symlink Cleanup
+- [ ] Project subtitle shows "N broken" count in red when project has broken symlinks
+- [ ] Project subtitle omits broken count when project has no broken symlinks
+- [ ] "Clean Broken (N)" button appears in footer when broken symlinks exist globally
+- [ ] "Clean Broken (N)" button does not appear when no broken symlinks exist
+- [ ] Clicking "Clean Broken" shows Cancel/Confirm buttons
+- [ ] Confirming removes all broken symlinks across all projects
+- [ ] After cleanup, broken count updates and button disappears if no broken symlinks remain
+- [ ] Cleanup errors are shown in the footer as red text
+
 ## Notifications
 - [ ] Warning notification fires when a file crosses the warning threshold
 - [ ] Critical notification fires when a file crosses the critical threshold

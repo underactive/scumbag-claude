@@ -25,10 +25,12 @@ struct MonitoredFile: Identifiable {
     let resolvedPath: String
     let isSymlink: Bool
     let isBrokenSymlink: Bool
+    let isTargetInScope: Bool // symlink target is safe to fully delete (within allowed paths)
     let size: UInt64
     let lastModified: Date
     let name: String
     let growthRate: Double? // bytes per second, nil when not growing or no prior data
+    let duplicateCount: Int // how many files share the same resolvedPath (1 = unique)
 }
 
 struct ClaudeProject: Identifiable {
@@ -44,6 +46,10 @@ struct ClaudeProject: Identifiable {
 
     var growthRate: Double {
         files.compactMap(\.growthRate).reduce(0, +)
+    }
+
+    var brokenSymlinkCount: Int {
+        files.filter(\.isBrokenSymlink).count
     }
 }
 
@@ -265,6 +271,56 @@ class MonitorService: ObservableObject {
         scan()
     }
 
+    func deleteBrokenSymlinks() {
+        lastDeleteError = nil
+        let fm = FileManager.default
+        var errorCount = 0
+        for project in projects {
+            for file in project.files where file.isBrokenSymlink {
+                // Re-verify the entry is still a broken symlink before deleting (TOCTOU guard)
+                let attrs = try? fm.attributesOfItem(atPath: file.path)
+                let isStillSymlink = (attrs?[.type] as? FileAttributeType) == .typeSymbolicLink
+                let targetExists = fm.fileExists(atPath: file.resolvedPath)
+                guard isStillSymlink && !targetExists else { continue }
+
+                do {
+                    try fm.removeItem(atPath: file.path)
+                    notifiedPaths.remove(file.path)
+                } catch {
+                    errorCount += 1
+                }
+            }
+        }
+        if errorCount > 0 {
+            lastDeleteError = "Failed to remove \(errorCount) broken symlink\(errorCount == 1 ? "" : "s")"
+        }
+        scan()
+    }
+
+    func deleteBrokenSymlinksInProject(_ project: ClaudeProject) {
+        lastDeleteError = nil
+        let fm = FileManager.default
+        var errorCount = 0
+        for file in project.files where file.isBrokenSymlink {
+            // Re-verify the entry is still a broken symlink before deleting (TOCTOU guard)
+            let attrs = try? fm.attributesOfItem(atPath: file.path)
+            let isStillSymlink = (attrs?[.type] as? FileAttributeType) == .typeSymbolicLink
+            let targetExists = fm.fileExists(atPath: file.resolvedPath)
+            guard isStillSymlink && !targetExists else { continue }
+
+            do {
+                try fm.removeItem(atPath: file.path)
+                notifiedPaths.remove(file.path)
+            } catch {
+                errorCount += 1
+            }
+        }
+        if errorCount > 0 {
+            lastDeleteError = "Failed to remove \(errorCount) broken symlink\(errorCount == 1 ? "" : "s") in \(project.displayName)"
+        }
+        scan()
+    }
+
     // MARK: - Path Validation
 
     private func isClaudeTmpPath(_ path: String) -> Bool {
@@ -408,10 +464,12 @@ class MonitorService: ObservableObject {
                         resolvedPath: file.resolvedPath,
                         isSymlink: file.isSymlink,
                         isBrokenSymlink: file.isBrokenSymlink,
+                        isTargetInScope: file.isTargetInScope,
                         size: file.size,
                         lastModified: file.lastModified,
                         name: file.name,
-                        growthRate: rate
+                        growthRate: rate,
+                        duplicateCount: 1
                     )
                 }
 
@@ -432,6 +490,44 @@ class MonitorService: ObservableObject {
                     claudeDir: claudeDir
                 )
                 foundProjects.append(project)
+            }
+        }
+
+        // Compute cross-project duplicate counts (files sharing the same resolved path)
+        var resolvedPathCounts: [String: Int] = [:]
+        for project in foundProjects {
+            for file in project.files where !file.isBrokenSymlink {
+                resolvedPathCounts[file.resolvedPath, default: 0] += 1
+            }
+        }
+        let hasDuplicates = resolvedPathCounts.values.contains { $0 > 1 }
+        if hasDuplicates {
+            foundProjects = foundProjects.map { project in
+                ClaudeProject(
+                    path: project.path,
+                    name: project.name,
+                    displayName: project.displayName,
+                    totalSize: project.totalSize,
+                    files: project.files.map { file in
+                        let count = file.isBrokenSymlink ? 1 : (resolvedPathCounts[file.resolvedPath] ?? 1)
+                        guard count != file.duplicateCount else { return file }
+                        return MonitoredFile(
+                            path: file.path,
+                            resolvedPath: file.resolvedPath,
+                            isSymlink: file.isSymlink,
+                            isBrokenSymlink: file.isBrokenSymlink,
+                            isTargetInScope: file.isTargetInScope,
+                            size: file.size,
+                            lastModified: file.lastModified,
+                            name: file.name,
+                            growthRate: file.growthRate,
+                            duplicateCount: count
+                        )
+                    },
+                    lastModified: project.lastModified,
+                    isStale: project.isStale,
+                    claudeDir: project.claudeDir
+                )
             }
         }
 
@@ -515,15 +611,21 @@ class MonitorService: ObservableObject {
                 }
             }
 
+            // Non-symlinks are always in scope (they live in /private/tmp/claude-*).
+            // Broken symlinks have no target — removing the dangling entry is always safe.
+            let targetInScope = !isSymlink || isBrokenSymlink || isInAllowedDeletionScope(resolvedPath)
+
             let file = MonitoredFile(
                 path: fullPath,
                 resolvedPath: resolvedPath,
                 isSymlink: isSymlink,
                 isBrokenSymlink: isBrokenSymlink,
+                isTargetInScope: targetInScope,
                 size: fileSize,
                 lastModified: modDate,
                 name: (fullPath as NSString).lastPathComponent,
-                growthRate: nil
+                growthRate: nil,
+                duplicateCount: 1
             )
             files.append(file)
 
