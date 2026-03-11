@@ -15,12 +15,16 @@ Claude Code writes task output to `/private/tmp/claude-*/` directories. These `.
 
 ## Features
 
-- **Menubar status indicator** -- icon changes color (green/orange/red) based on disk usage severity
+- **Menubar status indicator** -- icon changes color (green/orange/red) based on disk usage severity, with optional total size display
+- **FSEvents monitoring** -- near-instant detection (~2.5s) of file changes via macOS filesystem events, with timer-based polling as a safety net
 - **Per-project breakdown** -- groups files by Claude Code project, with expandable details showing individual file sizes
+- **Growth rate tracking** -- shows per-file and per-project growth rates (e.g. "↑ 2.3 MB/min") for actively growing files
+- **Symlink awareness** -- resolves symlinks to get actual sizes; "link only" badge for out-of-scope targets, "×N" badge for deduplicated files, broken symlink detection
 - **System notifications** -- alerts when files cross warning or critical size thresholds (fires once per file per threshold, not repeatedly)
-- **One-click cleanup** -- delete individual files, entire projects, or clean all at once with inline confirmation
+- **One-click cleanup** -- delete individual files, entire projects, clean all, or clean broken symlinks with inline confirmation
 - **Stale directory detection** -- flags project directories that haven't been modified in a configurable number of days
 - **Configurable thresholds** -- set your own warning/critical size limits, scan interval, and stale directory age
+- **Settings & About dialogs** -- dedicated settings window and right-click context menu with About dialog
 - **Launch at login** -- optional auto-start via macOS `ServiceManagement`
 - **Menubar-only** -- no Dock icon, no windows cluttering your workspace
 
@@ -76,14 +80,15 @@ All settings are accessible from the menubar dropdown. Defaults:
 |---------|---------|-------------|
 | Warning threshold | 100 MB | File/total size that triggers orange status |
 | Critical threshold | 500 MB | File/total size that triggers red status |
-| Scan interval | 30 seconds | How often the tmp directories are checked |
+| Scan interval | 15 seconds | How often the fallback timer polls (FSEvents handles most detection) |
 | Stale threshold | 7 days | Days before a project directory is considered stale |
 | Notifications | Enabled | System notification alerts on threshold crossings |
+| Show size in menu bar | Enabled | Display total disk usage next to the menubar icon |
 | Launch at login | Disabled | Start automatically when you log in |
 
 ## How it works
 
-Scumbag Claude polls `/private/tmp/claude-{uid}/` on a timer, enumerating all subdirectories and files. It resolves symlinks to get actual file sizes, deduplicates by resolved path, and groups everything by project. When a file crosses a size threshold, a system notification fires (once per file per threshold). The menubar icon updates to reflect the worst current status across all monitored files.
+Scumbag Claude uses macOS FSEvents to watch `/private/tmp` and `~/.claude/projects/` for filesystem changes, triggering a scan within ~2.5s of any change. A fallback timer polls every 15 seconds as a safety net. Each scan enumerates all subdirectories and files under `/private/tmp/claude-{uid}/`, resolves symlinks to get actual file sizes, deduplicates by resolved path, and groups everything by project. Growth rates are computed by comparing file sizes across successive scans. When a file crosses a size threshold, a system notification fires (once per file per threshold). The menubar icon updates to reflect the worst current status across all monitored files.
 
 ## License
 

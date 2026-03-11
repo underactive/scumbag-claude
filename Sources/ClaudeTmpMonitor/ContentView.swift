@@ -6,6 +6,7 @@ enum DeleteConfirmation: Equatable {
     case file(String)
     case project(String)
     case all
+    case brokenSymlinks
 }
 
 // MARK: - Hover Button Style
@@ -264,10 +265,18 @@ struct ContentView: View {
                             .cornerRadius(3)
                     }
                 }
-                Text("\(project.files.count) \(project.files.count == 1 ? "file" : "files") · \(project.claudeDir)")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .lineLimit(1)
+                HStack(spacing: 0) {
+                    Text("\(project.files.count) \(project.files.count == 1 ? "file" : "files")")
+                    if project.brokenSymlinkCount > 0 {
+                        Text(" · ")
+                        Text("\(project.brokenSymlinkCount) broken")
+                            .foregroundColor(.red)
+                    }
+                    Text(" · \(project.claudeDir)")
+                }
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .lineLimit(1)
             }
 
             Spacer()
@@ -328,19 +337,43 @@ struct ContentView: View {
                 .frame(width: 12)
 
             VStack(alignment: .leading, spacing: 0) {
-                Text(file.name)
-                    .font(.caption)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+                HStack(spacing: 3) {
+                    Text(file.name)
+                        .font(.caption)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                    if file.duplicateCount > 1 {
+                        Text("×\(file.duplicateCount)")
+                            .font(.caption2.monospacedDigit())
+                            .foregroundColor(.blue)
+                            .padding(.horizontal, 3)
+                            .padding(.vertical, 0.5)
+                            .background(Color.blue.opacity(0.12))
+                            .cornerRadius(3)
+                            .help("\(file.duplicateCount) symlinks share this target — size counted once")
+                    }
+                }
                 if file.isBrokenSymlink {
                     Text("broken symlink")
                         .font(.caption2)
                         .foregroundColor(.red)
                 } else if file.isSymlink {
-                    Text("→ \((file.resolvedPath as NSString).lastPathComponent)")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                        .lineLimit(1)
+                    HStack(spacing: 3) {
+                        Text("→ \((file.resolvedPath as NSString).lastPathComponent)")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                            .lineLimit(1)
+                        if !file.isTargetInScope {
+                            Text("link only")
+                                .font(.caption2)
+                                .foregroundColor(.purple)
+                                .padding(.horizontal, 3)
+                                .padding(.vertical, 0.5)
+                                .background(Color.purple.opacity(0.12))
+                                .cornerRadius(3)
+                                .help("Target is outside cleanup scope — delete removes only this symlink")
+                        }
+                    }
                 }
             }
 
@@ -510,23 +543,42 @@ struct ContentView: View {
 
                 Spacer()
 
-                if !monitor.projects.isEmpty {
-                    Button(action: { confirmDelete = .all }) {
-                        Text("Clean All")
-                            .font(.subheadline)
+                if brokenSymlinkCount > 0 {
+                    if confirmDelete == .brokenSymlinks {
+                        Button("Cancel") { confirmDelete = nil }
+                            .font(.caption)
+                        Button("Confirm") {
+                            monitor.deleteBrokenSymlinks()
+                            confirmDelete = nil
+                        }
+                        .font(.caption)
+                        .tint(.red)
+                    } else {
+                        Button(action: { confirmDelete = .brokenSymlinks }) {
+                            Text("Clean Broken (\(brokenSymlinkCount))")
+                                .font(.subheadline)
+                        }
+                        .tint(.red)
                     }
-                    .tint(.orange)
                 }
 
-                if confirmDelete == .all {
-                    Button("Cancel") { confirmDelete = nil }
+                if !monitor.projects.isEmpty {
+                    if confirmDelete == .all {
+                        Button("Cancel") { confirmDelete = nil }
+                            .font(.caption)
+                        Button("Confirm") {
+                            monitor.deleteAllProjects()
+                            confirmDelete = nil
+                        }
                         .font(.caption)
-                    Button("Confirm") {
-                        monitor.deleteAllProjects()
-                        confirmDelete = nil
+                        .tint(.red)
+                    } else {
+                        Button(action: { confirmDelete = .all }) {
+                            Text("Clean All")
+                                .font(.subheadline)
+                        }
+                        .tint(.orange)
                     }
-                    .font(.caption)
-                    .tint(.red)
                 }
 
                 Button("Quit") {
@@ -550,6 +602,10 @@ struct ContentView: View {
         } else {
             expandedProjects.insert(id)
         }
+    }
+
+    private var brokenSymlinkCount: Int {
+        monitor.projects.reduce(0) { $0 + $1.brokenSymlinkCount }
     }
 
     private func sizeColor(_ bytes: UInt64) -> Color {
