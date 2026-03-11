@@ -114,6 +114,14 @@
 - [ ] Running from dev build (swift run) shows "update manually" error instead of attempting install
 - [ ] Install flow: app terminates, shell script replaces bundle, clears quarantine, relaunches
 
+## FSEvents Detection
+- [ ] Creating a new file in `/private/tmp/claude-*/` is detected within ~3 seconds (vs 15s poll)
+- [ ] Deleting a file from `/private/tmp/claude-*/` is reflected in the popover within ~3 seconds
+- [ ] File size growth at symlink targets in `~/.claude/projects/` triggers a scan within ~3 seconds
+- [ ] Pie chart timer resets after an FSEvents-triggered scan
+- [ ] Fallback timer still fires on schedule when no filesystem changes occur
+- [ ] Manual refresh (Cmd+R) still works alongside FSEvents monitoring
+
 ## Notifications
 - [ ] Warning notification fires when a file crosses the warning threshold
 - [ ] Critical notification fires when a file crosses the critical threshold

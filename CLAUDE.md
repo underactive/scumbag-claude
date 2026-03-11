@@ -21,7 +21,7 @@ Not applicable — this is a software-only macOS application.
 Six-file SwiftUI app using a custom `NSStatusItem` for menubar integration.
 
 - `Sources/ClaudeTmpMonitor/App.swift` - Entry point: `@main` SwiftUI App with `NSApplicationDelegateAdaptor`. `AppDelegate` owns `MonitorService` and `UpdateService`, creates `NSStatusItem` with `NSPopover` (left-click) and `NSMenu` (right-click). Manages singleton `NSWindow` instances for Settings and About dialogs. Uses `Combine` subscriber on `monitor.$status` + `monitor.$totalSize` to reactively update menubar icon and title. Loads menubar icon from `Bundle.module` resources.
-- `Sources/ClaudeTmpMonitor/MonitorService.swift` - Core business logic: models (`MonitoredFile`, `ClaudeProject`, `MonitorStatus`), scanning, settings persistence, notifications, deletion
+- `Sources/ClaudeTmpMonitor/MonitorService.swift` - Core business logic: models (`MonitoredFile`, `ClaudeProject`, `MonitorStatus`), FSEvents + timer-based scanning, settings persistence, notifications, deletion
 - `Sources/ClaudeTmpMonitor/UpdateService.swift` - Auto-update logic: GitHub releases API checking, download with progress, self-replacement via shell script, version comparison. Persists settings via UserDefaults.
 - `Sources/ClaudeTmpMonitor/ContentView.swift` - Main popover view: header, status bar, expandable projects list, update banner, footer with Settings button, Clean All, and Quit. Receives `onOpenSettings` closure from `AppDelegate`. Defines `HoverButtonStyle` (custom `ButtonStyle` with configurable hover color) used by icon-only buttons.
 - `Sources/ClaudeTmpMonitor/SettingsView.swift` - Settings dialog: threshold/interval rows, notifications toggle, launch at login toggle. Hosted in a separate `NSWindow`.
@@ -34,12 +34,14 @@ Six-file SwiftUI app using a custom `NSStatusItem` for menubar integration.
 - AppKit (`NSStatusItem`, `NSPopover`, `NSMenu`, `NSWindow`, `NSImage` for menubar integration)
 - Combine (`combineLatest`, `sink` for reactive menubar icon updates)
 - ServiceManagement (`SMAppService` for launch-at-login)
+- CoreServices (`FSEventStream` for filesystem change notifications)
 - URLSession (async `data(from:)` and `download(from:)` for GitHub API and update downloads)
 
 ### Key Subsystems
 
 #### 1. File Monitoring (MonitorService.scan)
-- Timer-based polling scans `/private/tmp/claude-*/` every N seconds (default 15)
+- **Primary: FSEvents** — watches `/private/tmp` and `~/.claude/projects/` via `FSEventStreamCreate` for near-instant detection (~2.5s worst case). Callback filters events for paths containing `/claude-` or `/.claude/projects/`, debounces with 0.5s delay, then triggers a scan. Watches `/private/tmp` (parent) because `claude-*` dirs may not exist at startup.
+- **Fallback: Timer** — polls every N seconds (default 15) as a safety net. Timer resets after every scan regardless of trigger source (FSEvents, timer, or manual).
 - Enumerates all subdirectories and files recursively via `FileManager.enumerator`
 - Resolves symlinks to get actual file sizes; detects and handles broken symlinks
 - Deduplicates by resolved path (`seenResolvedPaths: Set<String>`) to avoid double-counting
@@ -100,7 +102,7 @@ dismissedUpdateVersion: String? // skip showing banner for this version (in Upda
 - UI: update banner in popover between projects and footer, "Check for Updates..." in right-click menu, update status in About dialog, auto-check toggle in Settings
 
 ### Data Flow
-`MonitorService` and `UpdateService` are created and owned by `AppDelegate`. Both are passed to `ContentView` (popover), `SettingsView` (dialog), and `AboutView` (dialog) via `.environmentObject()`. All state mutations happen on `@MainActor`. Timer callbacks dispatch back to `@MainActor` via `Task`. Menubar icon/title updates are driven by a `Combine` subscriber on `monitor.$status`, `monitor.$totalSize`, and `monitor.$showSizeInMenuBar`.
+`MonitorService` and `UpdateService` are created and owned by `AppDelegate`. Both are passed to `ContentView` (popover), `SettingsView` (dialog), and `AboutView` (dialog) via `.environmentObject()`. All state mutations happen on `@MainActor`. FSEvents callbacks dispatch to `@MainActor` via `Task`, debounce with 0.5s delay, then call `scan()`. Timer callbacks dispatch back to `@MainActor` via `Task`. Menubar icon/title updates are driven by a `Combine` subscriber on `monitor.$status`, `monitor.$totalSize`, and `monitor.$showSizeInMenuBar`.
 
 ---
 
@@ -140,13 +142,12 @@ No external services or third-party SDKs. All operations are local filesystem an
 
 ## Known Issues / Limitations
 
-1. **No FSEvents** — Uses timer-based polling instead of FSEvents. Simpler but slightly higher latency for detecting new files.
-2. **No auto-cleanup** — Settings exist for thresholds but auto-deletion is not yet implemented.
-3. **Hardcoded skip words in `extractProjectName`** — The display name extractor has a hardcoded `skipWords` set (`Users`, `Development`, `personal`, `hardware`, `esison`) that won't work for other users.
-4. **No TOCTOU protection on delete** — Symlink targets are not re-resolved at delete time. A symlink could be retargeted between scan and delete. Deferred to separate plan.
-5. **Gatekeeper quarantine on auto-update** — Downloaded update may trigger Gatekeeper re-validation. Mitigated by `xattr -cr` in the updater script, but users may see a brief security prompt.
-6. **No delta updates** — Auto-update downloads the full zip archive every time. No binary diff/patch mechanism.
-7. **No checksum verification on updates** — Downloaded zip is not verified against a SHA256 hash. Relies on HTTPS transport security.
+1. **No auto-cleanup** — Settings exist for thresholds but auto-deletion is not yet implemented.
+2. **Hardcoded skip words in `extractProjectName`** — The display name extractor has a hardcoded `skipWords` set (`Users`, `Development`, `personal`, `hardware`, `esison`) that won't work for other users.
+3. **No TOCTOU protection on delete** — Symlink targets are not re-resolved at delete time. A symlink could be retargeted between scan and delete. Deferred to separate plan.
+4. **Gatekeeper quarantine on auto-update** — Downloaded update may trigger Gatekeeper re-validation. Mitigated by `xattr -cr` in the updater script, but users may see a brief security prompt.
+5. **No delta updates** — Auto-update downloads the full zip archive every time. No binary diff/patch mechanism.
+6. **No checksum verification on updates** — Downloaded zip is not verified against a SHA256 hash. Relies on HTTPS transport security.
 
 ---
 
