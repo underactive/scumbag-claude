@@ -7,7 +7,7 @@
 
 ## Intelligence / Visibility
 
-- [ ] **Growth rate tracking** — Track file sizes across scans to show "growing at X MB/min." Useful for catching runaway agent output in real-time.
+- [x] **Growth rate tracking** — Track file sizes across scans to show "growing at X MB/min." Useful for catching runaway agent output in real-time.
 - [ ] **Symlink scope indicators** — Visually distinguish files where the symlink target is safe to delete (within `/private/tmp/claude-` or `~/.claude/projects/`) vs out-of-scope (symlink-only removal), so users know what cleanup actually does.
 - [ ] **Deduplication visibility** — Show when multiple symlinks point to the same resolved file. The scan already deduplicates via `seenResolvedPaths` but this is invisible to the user.
 - [ ] **Statistics / historical graphs** — Track and display trends of temp file growth over time.

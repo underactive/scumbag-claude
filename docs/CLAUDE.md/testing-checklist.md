@@ -122,6 +122,14 @@
 - [ ] Fallback timer still fires on schedule when no filesystem changes occur
 - [ ] Manual refresh (Cmd+R) still works alongside FSEvents monitoring
 
+## Growth Rate Tracking
+- [ ] First scan shows no growth rate indicators (no prior data)
+- [ ] Second scan shows "↑ X.X MB/min" on project row when files grew between scans
+- [ ] Second scan shows "↑ X.X MB/min" on individual file rows for growing files
+- [ ] Growth indicator disappears when a file stops growing (same size across scans)
+- [ ] Project growth rate is the sum of its individual file growth rates
+- [ ] Growth rate units scale appropriately (KB/min, MB/min, GB/min)
+
 ## Notifications
 - [ ] Warning notification fires when a file crosses the warning threshold
 - [ ] Critical notification fires when a file crosses the critical threshold

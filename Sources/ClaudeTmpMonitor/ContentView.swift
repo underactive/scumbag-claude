@@ -276,6 +276,12 @@ struct ContentView: View {
                 .font(.subheadline.monospacedDigit())
                 .foregroundColor(sizeColor(project.totalSize))
 
+            if let rateText = formatGrowthRate(project.growthRate) {
+                Text("↑ \(rateText)")
+                    .font(.caption.monospacedDigit())
+                    .foregroundColor(.orange)
+            }
+
             if confirmDelete == .project(project.id) {
                 Button("Cancel") { confirmDelete = nil }
                     .font(.caption)
@@ -344,6 +350,12 @@ struct ContentView: View {
                 Text(formatBytes(file.size))
                     .font(.caption.monospacedDigit())
                     .foregroundColor(sizeColor(file.size))
+            }
+
+            if let rate = file.growthRate, let rateText = formatGrowthRate(rate) {
+                Text("↑ \(rateText)")
+                    .font(.caption2.monospacedDigit())
+                    .foregroundColor(.orange)
             }
 
             if confirmDelete == .file(file.id) {

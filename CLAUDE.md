@@ -4,7 +4,7 @@
 
 **Scumbag Claude** (aka Claude Tmp Monitor) is a macOS menubar application that monitors Claude Code's temporary file directories (`/private/tmp/claude-*/`) for large `.output` files and stale task directories, alerting the user and providing quick cleanup actions.
 
-**Current Version:** 0.3.4
+**Current Version:** 0.3.5
 **Status:** In development
 
 ---
@@ -21,7 +21,7 @@ Not applicable — this is a software-only macOS application.
 Six-file SwiftUI app using a custom `NSStatusItem` for menubar integration.
 
 - `Sources/ClaudeTmpMonitor/App.swift` - Entry point: `@main` SwiftUI App with `NSApplicationDelegateAdaptor`. `AppDelegate` owns `MonitorService` and `UpdateService`, creates `NSStatusItem` with `NSPopover` (left-click) and `NSMenu` (right-click). Manages singleton `NSWindow` instances for Settings and About dialogs. Uses `Combine` subscriber on `monitor.$status` + `monitor.$totalSize` to reactively update menubar icon and title. Loads menubar icon from `Bundle.module` resources.
-- `Sources/ClaudeTmpMonitor/MonitorService.swift` - Core business logic: models (`MonitoredFile`, `ClaudeProject`, `MonitorStatus`), FSEvents + timer-based scanning, settings persistence, notifications, deletion
+- `Sources/ClaudeTmpMonitor/MonitorService.swift` - Core business logic: models (`MonitoredFile`, `ClaudeProject`, `MonitorStatus`), FSEvents + timer-based scanning, growth rate tracking, settings persistence, notifications, deletion
 - `Sources/ClaudeTmpMonitor/UpdateService.swift` - Auto-update logic: GitHub releases API checking, download with progress, self-replacement via shell script, version comparison. Persists settings via UserDefaults.
 - `Sources/ClaudeTmpMonitor/ContentView.swift` - Main popover view: header, status bar, expandable projects list, update banner, footer with Settings button, Clean All, and Quit. Receives `onOpenSettings` closure from `AppDelegate`. Defines `HoverButtonStyle` (custom `ButtonStyle` with configurable hover color) used by icon-only buttons.
 - `Sources/ClaudeTmpMonitor/SettingsView.swift` - Settings dialog: threshold/interval rows, notifications toggle, launch at login toggle. Hosted in a separate `NSWindow`.
@@ -53,6 +53,7 @@ Six-file SwiftUI app using a custom `NSStatusItem` for menubar integration.
       {taskid}.output       # Symlink to .jsonl OR actual large file
 ```
 - `.output` files may be symlinks to `~/.claude/projects/.../subagents/agent-*.jsonl` or actual files that grow unbounded
+- **Growth rate tracking**: Compares file sizes across successive scans via `previousSizes: [String: (size: UInt64, time: Date)]` (keyed by resolved path). Computes `growthRate` (bytes/sec) per file; `ClaudeProject.growthRate` is the sum of its files' rates. UI shows "↑ X.X MB/min" indicators on project and file rows for actively growing files. `formatGrowthRate()` converts bytes/sec to KB/min, MB/min, or GB/min.
 
 #### 2. Status & Notifications
 - Three states: Normal (green), Warning (orange), Critical (red)

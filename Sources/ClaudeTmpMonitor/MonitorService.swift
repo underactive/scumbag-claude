@@ -28,6 +28,7 @@ struct MonitoredFile: Identifiable {
     let size: UInt64
     let lastModified: Date
     let name: String
+    let growthRate: Double? // bytes per second, nil when not growing or no prior data
 }
 
 struct ClaudeProject: Identifiable {
@@ -40,6 +41,10 @@ struct ClaudeProject: Identifiable {
     let lastModified: Date
     let isStale: Bool
     let claudeDir: String
+
+    var growthRate: Double {
+        files.compactMap(\.growthRate).reduce(0, +)
+    }
 }
 
 enum MonitorStatus: String {
@@ -122,6 +127,7 @@ class MonitorService: ObservableObject {
     private var timer: Timer?
     private var eventStream: FSEventStreamRef?
     private var debouncedScanTask: Task<Void, Never>?
+    private var previousSizes: [String: (size: UInt64, time: Date)] = [:]
     private var notifiedPaths: Set<String> = []
     private var isUpdatingLaunchAtLogin = false
 
@@ -360,6 +366,7 @@ class MonitorService: ObservableObject {
 
         let fm = FileManager.default
         let tmpDir = "/private/tmp"
+        let scanTime = Date()
         var foundProjects: [ClaudeProject] = []
         var currentPaths: Set<String> = []
 
@@ -381,8 +388,32 @@ class MonitorService: ObservableObject {
                 let projectPath = "\(claudePath)/\(projectDir)"
                 guard fm.fileExists(atPath: projectPath, isDirectory: &isDir), isDir.boolValue else { continue }
 
-                let (files, projectTotalSize) = scanDirectory(projectPath, fm: fm)
-                guard !files.isEmpty else { continue }
+                let (rawFiles, projectTotalSize) = scanDirectory(projectPath, fm: fm)
+                guard !rawFiles.isEmpty else { continue }
+
+                // Compute growth rates by comparing to previous scan
+                let files = rawFiles.map { file -> MonitoredFile in
+                    var rate: Double? = nil
+                    if let prev = previousSizes[file.resolvedPath] {
+                        let delta = Double(file.size) - Double(prev.size)
+                        if delta > 0 {
+                            let timeDelta = scanTime.timeIntervalSince(prev.time)
+                            if timeDelta > 0 {
+                                rate = delta / timeDelta
+                            }
+                        }
+                    }
+                    return MonitoredFile(
+                        path: file.path,
+                        resolvedPath: file.resolvedPath,
+                        isSymlink: file.isSymlink,
+                        isBrokenSymlink: file.isBrokenSymlink,
+                        size: file.size,
+                        lastModified: file.lastModified,
+                        name: file.name,
+                        growthRate: rate
+                    )
+                }
 
                 for file in files { currentPaths.insert(file.path) }
 
@@ -407,7 +438,22 @@ class MonitorService: ObservableObject {
         projects = foundProjects.sorted { $0.totalSize > $1.totalSize }
         totalSize = projects.reduce(0) { $0 + $1.totalSize }
         totalFileCount = projects.reduce(0) { $0 + $1.files.count }
-        lastScanTime = Date()
+        lastScanTime = scanTime
+
+        // Rebuild previousSizes from current scan (implicitly prunes stale entries).
+        // Carry forward the previous timestamp when size hasn't changed, so that
+        // growth rates after idle periods reflect actual growth duration, not idle time.
+        var newPreviousSizes: [String: (size: UInt64, time: Date)] = [:]
+        for project in projects {
+            for file in project.files {
+                if let prev = previousSizes[file.resolvedPath], prev.size == file.size {
+                    newPreviousSizes[file.resolvedPath] = prev
+                } else {
+                    newPreviousSizes[file.resolvedPath] = (file.size, scanTime)
+                }
+            }
+        }
+        previousSizes = newPreviousSizes
 
         // Prune notifiedPaths to only contain paths that still exist
         notifiedPaths.formIntersection(currentPaths)
@@ -476,7 +522,8 @@ class MonitorService: ObservableObject {
                 isBrokenSymlink: isBrokenSymlink,
                 size: fileSize,
                 lastModified: modDate,
-                name: (fullPath as NSString).lastPathComponent
+                name: (fullPath as NSString).lastPathComponent,
+                growthRate: nil
             )
             files.append(file)
 
@@ -579,4 +626,15 @@ class MonitorService: ObservableObject {
 
 func formatBytes(_ bytes: UInt64) -> String {
     ByteCountFormatter.string(fromByteCount: Int64(clamping: bytes), countStyle: .file)
+}
+
+func formatGrowthRate(_ bytesPerSecond: Double) -> String? {
+    guard bytesPerSecond.isFinite, bytesPerSecond > 0 else { return nil }
+    let bytesPerMinute = bytesPerSecond * 60
+    guard bytesPerMinute >= 1024 else { return nil } // suppress sub-1 KB/min noise
+    let formatted = ByteCountFormatter.string(
+        fromByteCount: Int64(clamping: Int(bytesPerMinute)),
+        countStyle: .file
+    )
+    return "\(formatted)/min"
 }
