@@ -1,3 +1,4 @@
+import CoreServices
 import Foundation
 import ServiceManagement
 import UserNotifications
@@ -119,6 +120,8 @@ class MonitorService: ObservableObject {
     var criticalBytes: UInt64 { UInt64(clamping: criticalThresholdMB) * 1024 * 1024 }
 
     private var timer: Timer?
+    private var eventStream: FSEventStreamRef?
+    private var debouncedScanTask: Task<Void, Never>?
     private var notifiedPaths: Set<String> = []
     private var isUpdatingLaunchAtLogin = false
 
@@ -144,6 +147,7 @@ class MonitorService: ObservableObject {
         requestNotificationPermission()
         checkNotificationAuthorization()
         startTimer()
+        startFSEvents()
 
         Task { @MainActor in
             self.scan()
@@ -151,6 +155,14 @@ class MonitorService: ObservableObject {
     }
 
     deinit {
+        // Inlined (can't call @MainActor stopFSEvents() from nonisolated deinit)
+        if let stream = eventStream {
+            FSEventStreamStop(stream)
+            FSEventStreamInvalidate(stream)
+            FSEventStreamRelease(stream)
+            eventStream = nil
+        }
+        debouncedScanTask?.cancel()
         timer?.invalidate()
     }
 
@@ -278,6 +290,69 @@ class MonitorService: ObservableObject {
         startTimer()
     }
 
+    private func startFSEvents() {
+        let claudeProjectsPath = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".claude/projects").path
+        let watchedPaths = ["/private/tmp", claudeProjectsPath] as CFArray
+
+        // passUnretained is safe: MonitorService is a singleton owned by AppDelegate
+        // for the entire app lifetime. The stream is always stopped before dealloc (deinit).
+        var context = FSEventStreamContext(
+            version: 0,
+            info: Unmanaged.passUnretained(self).toOpaque(),
+            retain: nil,
+            release: nil,
+            copyDescription: nil
+        )
+
+        let callback: FSEventStreamCallback = { _, info, _, eventPaths, _, _ in
+            guard let info = info else { return }
+            let monitor = Unmanaged<MonitorService>.fromOpaque(info).takeUnretainedValue()
+
+            guard let paths = Unmanaged<CFArray>.fromOpaque(eventPaths).takeUnretainedValue() as? [String] else { return }
+            let relevant = paths.contains { $0.contains("/claude-") || $0.contains("/.claude/projects/") }
+            guard relevant else { return }
+
+            Task { @MainActor in
+                monitor.scheduleDebouncedScan()
+            }
+        }
+
+        // NoDefer: first event after a quiet period delivers immediately; subsequent
+        // events still coalesce within the 2.0s latency window. Combined with the 0.5s
+        // debounce in scheduleDebouncedScan(), worst-case detection latency is ~2.5s.
+        guard let stream = FSEventStreamCreate(
+            nil,
+            callback,
+            &context,
+            watchedPaths,
+            FSEventsGetCurrentEventId(),
+            2.0,
+            UInt32(kFSEventStreamCreateFlagUseCFTypes | kFSEventStreamCreateFlagNoDefer)
+        ) else { return }
+
+        FSEventStreamSetDispatchQueue(stream, DispatchQueue.main)
+        FSEventStreamStart(stream)
+        eventStream = stream
+    }
+
+    private func stopFSEvents() {
+        guard let stream = eventStream else { return }
+        FSEventStreamStop(stream)
+        FSEventStreamInvalidate(stream)
+        FSEventStreamRelease(stream)
+        eventStream = nil
+    }
+
+    private func scheduleDebouncedScan() {
+        debouncedScanTask?.cancel()
+        debouncedScanTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 500_000_000) // 0.5s debounce
+            guard !Task.isCancelled else { return }
+            self?.scan()
+        }
+    }
+
     private func scan() {
         guard !isScanning else { return }
         isScanning = true
@@ -333,12 +408,14 @@ class MonitorService: ObservableObject {
         totalSize = projects.reduce(0) { $0 + $1.totalSize }
         totalFileCount = projects.reduce(0) { $0 + $1.files.count }
         lastScanTime = Date()
-        nextScanTime = Date().addingTimeInterval(TimeInterval(scanIntervalSeconds))
 
         // Prune notifiedPaths to only contain paths that still exist
         notifiedPaths.formIntersection(currentPaths)
 
         updateStatus()
+
+        // Reset fallback timer after every scan (regardless of trigger source)
+        restartTimer()
     }
 
     private func resolveRealPath(_ path: String) throws -> String {
