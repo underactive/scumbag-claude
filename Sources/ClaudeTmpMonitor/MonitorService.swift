@@ -15,6 +15,7 @@ enum SettingsKey {
     static let checkForUpdatesAutomatically = "checkForUpdatesAutomatically"
     static let lastUpdateCheckTime = "lastUpdateCheckTime"
     static let dismissedUpdateVersion = "dismissedUpdateVersion"
+    static let historyRetentionDays = "historyRetentionDays"
 }
 
 // MARK: - Models
@@ -129,6 +130,10 @@ class MonitorService: ObservableObject {
 
     var warningBytes: UInt64 { UInt64(clamping: warningThresholdMB) * 1024 * 1024 }
     var criticalBytes: UInt64 { UInt64(clamping: criticalThresholdMB) * 1024 * 1024 }
+
+    /// Called synchronously on @MainActor at the end of each scan() with the updated totals and projects.
+    /// Callers must not trigger another scan() from within this closure (isScanning guard would silently no-op).
+    var onScanComplete: ((UInt64, Int, [ClaudeProject]) -> Void)?
 
     private var timer: Timer?
     private var eventStream: FSEventStreamRef?
@@ -555,6 +560,9 @@ class MonitorService: ObservableObject {
         notifiedPaths.formIntersection(currentPaths)
 
         updateStatus()
+
+        // Notify history service (or any other listener) of scan results
+        onScanComplete?(totalSize, totalFileCount, projects)
 
         // Reset fallback timer after every scan (regardless of trigger source)
         restartTimer()

@@ -3,6 +3,7 @@ import SwiftUI
 struct SettingsView: View {
     @EnvironmentObject var monitor: MonitorService
     @EnvironmentObject var updateService: UpdateService
+    @EnvironmentObject var historyService: HistoryService
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -14,6 +15,7 @@ struct SettingsView: View {
             settingRow("Critical threshold", value: $monitor.criticalThresholdMB, unit: "MB")
             settingRow("Scan interval", value: $monitor.scanIntervalSeconds, unit: "sec")
             settingRow("Stale after", value: $monitor.staleDaysThreshold, unit: "days")
+            settingRow("History retention", value: $historyService.historyRetentionDays, unit: "days")
 
             Divider()
                 .padding(.vertical, 4)

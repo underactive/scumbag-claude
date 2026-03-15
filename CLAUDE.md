@@ -4,7 +4,7 @@
 
 **Scumbag Claude** (aka Claude Tmp Monitor) is a macOS menubar application that monitors Claude Code's temporary file directories (`/private/tmp/claude-*/`) for large `.output` files and stale task directories, alerting the user and providing quick cleanup actions.
 
-**Current Version:** 0.3.5
+**Current Version:** 0.4.0
 **Status:** In development
 
 ---
@@ -18,13 +18,15 @@ Not applicable — this is a software-only macOS application.
 ## Architecture
 
 ### Core Files
-Six-file SwiftUI app using a custom `NSStatusItem` for menubar integration.
+Eight-file SwiftUI app using a custom `NSStatusItem` for menubar integration.
 
-- `Sources/ClaudeTmpMonitor/App.swift` - Entry point: `@main` SwiftUI App with `NSApplicationDelegateAdaptor`. `AppDelegate` owns `MonitorService` and `UpdateService`, creates `NSStatusItem` with `NSPopover` (left-click) and `NSMenu` (right-click). Manages singleton `NSWindow` instances for Settings and About dialogs. Uses `Combine` subscriber on `monitor.$status` + `monitor.$totalSize` to reactively update menubar icon and title. Loads menubar icon from `Bundle.module` resources.
-- `Sources/ClaudeTmpMonitor/MonitorService.swift` - Core business logic: models (`MonitoredFile`, `ClaudeProject`, `MonitorStatus`), FSEvents + timer-based scanning, growth rate tracking, symlink scope/deduplication visibility, settings persistence, notifications, deletion
+- `Sources/ClaudeTmpMonitor/App.swift` - Entry point: `@main` SwiftUI App with `NSApplicationDelegateAdaptor`. `AppDelegate` owns `MonitorService`, `UpdateService`, and `HistoryService`, creates `NSStatusItem` with `NSPopover` (left-click) and `NSMenu` (right-click). Manages singleton `NSWindow` instances for Settings, About, and Statistics dialogs. Uses `Combine` subscriber on `monitor.$status` + `monitor.$totalSize` to reactively update menubar icon and title. Wires `monitor.onScanComplete` callback to `HistoryService.recordSnapshot()`. Flushes history on `applicationWillTerminate`. Loads menubar icon from `Bundle.module` resources.
+- `Sources/ClaudeTmpMonitor/MonitorService.swift` - Core business logic: models (`MonitoredFile`, `ClaudeProject`, `MonitorStatus`), FSEvents + timer-based scanning, growth rate tracking, symlink scope/deduplication visibility, settings persistence, notifications, deletion. Exposes `onScanComplete` callback invoked at the end of each `scan()`.
+- `Sources/ClaudeTmpMonitor/HistoryService.swift` - Historical data persistence: records scan snapshots (`HistorySnapshot`, `ProjectSnapshot` Codable models), two-tier aggregation (raw ≤1h, 5-minute buckets beyond), JSON storage in `~/Library/Application Support/com.esison.claude-tmp-monitor/history.json`, configurable retention (1–30 days), 60s save timer, querying by `TimeRange`.
 - `Sources/ClaudeTmpMonitor/UpdateService.swift` - Auto-update logic: GitHub releases API checking, download with progress, self-replacement via shell script, version comparison. Persists settings via UserDefaults.
-- `Sources/ClaudeTmpMonitor/ContentView.swift` - Main popover view: header, status bar, expandable projects list with symlink scope/deduplication badges and broken symlink counts, update banner, footer with Settings button, Clean Broken, Clean All, and Quit. Receives `onOpenSettings` closure from `AppDelegate`. Defines `HoverButtonStyle` (custom `ButtonStyle` with configurable hover color) used by icon-only buttons.
-- `Sources/ClaudeTmpMonitor/SettingsView.swift` - Settings dialog: threshold/interval rows, notifications toggle, launch at login toggle. Hosted in a separate `NSWindow`.
+- `Sources/ClaudeTmpMonitor/ContentView.swift` - Main popover view: header, status bar, expandable projects list with symlink scope/deduplication badges and broken symlink counts, update banner, footer with Settings button, Stats button, Clean Broken, Clean All, and Quit. Receives `onOpenSettings` and `onOpenStats` closures from `AppDelegate`. Defines `HoverButtonStyle` (custom `ButtonStyle` with configurable hover color) used by icon-only buttons.
+- `Sources/ClaudeTmpMonitor/StatsView.swift` - Statistics window: SwiftUI Charts area+line chart of total size over time, segmented time range picker (1h/24h/7d), current/peak/average summary stats, empty state. Hosted in a separate resizable `NSWindow`.
+- `Sources/ClaudeTmpMonitor/SettingsView.swift` - Settings dialog: threshold/interval rows, history retention row, notifications toggle, launch at login toggle. Hosted in a separate `NSWindow`.
 - `Sources/ClaudeTmpMonitor/AboutView.swift` - About dialog: app icon, name, version, update status, GitHub link. Hosted in a separate `NSWindow`.
 
 ### Dependencies
@@ -35,6 +37,7 @@ Six-file SwiftUI app using a custom `NSStatusItem` for menubar integration.
 - Combine (`combineLatest`, `sink` for reactive menubar icon updates)
 - ServiceManagement (`SMAppService` for launch-at-login)
 - CoreServices (`FSEventStream` for filesystem change notifications)
+- Charts (SwiftUI Charts framework for `AreaMark`, `LineMark`, `AxisMarks` in statistics view)
 - URLSession (async `data(from:)` and `download(from:)` for GitHub API and update downloads)
 
 ### Key Subsystems
@@ -58,13 +61,21 @@ Six-file SwiftUI app using a custom `NSStatusItem` for menubar integration.
 - **Deduplication visibility**: After scanning all projects, `scan()` builds a global `resolvedPath → count` frequency map. Files sharing the same resolved path get `duplicateCount > 1`. The UI shows a "×N" badge in blue when multiple symlinks point to the same target, with a tooltip explaining that size is counted once.
 - **Broken symlink cleanup**: `ClaudeProject.brokenSymlinkCount` counts broken symlinks per project (shown in subtitle). `deleteBrokenSymlinks()` removes all broken symlink entries globally. `deleteBrokenSymlinksInProject(_:)` scopes cleanup to a single project. The footer shows a "Clean Broken (N)" button when broken symlinks exist.
 
-#### 2. Status & Notifications
+#### 2. History & Statistics (HistoryService)
+- `HistoryService` records a `HistorySnapshot` after each scan via `MonitorService.onScanComplete` callback
+- **Two-tier aggregation**: raw scan-resolution snapshots kept for ≤1 hour; older data downsampled to 5-minute buckets (averaging totalSize, totalFileCount, per-project values). Steady-state: ~2,256 records, <500 KB.
+- **Persistence**: JSON-encoded to `~/Library/Application Support/com.esison.claude-tmp-monitor/history.json`. Save runs every 60s + on `applicationWillTerminate`. Load on init.
+- **Retention**: configurable 1–30 days (default 7) via `historyRetentionDays`. Pruning runs at each save.
+- **Querying**: `snapshots(for:)` filters by `TimeRange` (.oneHour, .twentyFourHours, .sevenDays); `peakSize(in:)` and `averageSize(in:)` compute stats.
+- **StatsView**: Separate 600×450 resizable `NSWindow` with SwiftUI Charts `AreaMark`+`LineMark`, segmented time range picker, current/peak/average summary row, and empty state for <2 data points.
+
+#### 3. Status & Notifications
 - Three states: Normal (green), Warning (orange), Critical (red)
 - Status determined by largest individual file size OR total size vs thresholds
 - Tracks `notifiedPaths: Set<String>` — each file triggers a system notification only once per threshold crossing
 - Menubar icon changes color to reflect current status (via Combine subscriber)
 
-#### 3. Settings / Configuration Storage
+#### 4. Settings / Configuration Storage
 ```swift
 warningThresholdMB: Int     // default: 100, range: 10...1000000
 criticalThresholdMB: Int    // default: 500, range: 50...1000000
@@ -78,6 +89,7 @@ notificationsDenied: Bool   // true when system notification permission is denie
 checkForUpdatesAutomatically: Bool // default: true (in UpdateService)
 lastUpdateCheckTime: Date?  // epoch stored in UserDefaults (in UpdateService)
 dismissedUpdateVersion: String? // skip showing banner for this version (in UpdateService)
+historyRetentionDays: Int       // default: 7, range: 1...30 (in HistoryService)
 ```
 - Saved to `UserDefaults` via `@Published var` with `didSet` persistence pattern
 - Default values loaded in `MonitorService.init()` using `defaults.object(forKey:) as? Type ?? fallback`
@@ -85,7 +97,7 @@ dismissedUpdateVersion: String? // skip showing banner for this version (in Upda
 - UserDefaults keys are defined in `SettingsKey` enum (static string constants)
 - Computed properties `warningBytes` / `criticalBytes` provide pre-converted threshold values
 
-#### 4. File Deletion
+#### 5. File Deletion
 - **Path validation allowlist**: symlink targets are only deleted if the resolved path starts with `/private/tmp/claude-` or `~/.claude/projects/`. Out-of-scope targets are skipped — the symlink itself is always removed to clean up the directory entry.
 - Deleting a file: validates symlink target scope, removes target if allowed, then removes the symlink/file entry itself
 - Deleting a project: validates each symlink target, removes allowed targets, then removes the entire project directory via `removeItem(atPath:)`
@@ -95,7 +107,7 @@ dismissedUpdateVersion: String? // skip showing banner for this version (in Upda
 - Deletion errors are surfaced via `lastDeleteError` published property, shown in the footer
 - No communication protocol — all operations are local filesystem
 
-#### 5. Auto-Update (UpdateService)
+#### 6. Auto-Update (UpdateService)
 - Periodically checks `https://api.github.com/repos/underactive/scumbag-claude/releases/latest` (default: once per day)
 - Compares remote `tag_name` (stripped of leading "v") against `CFBundleShortVersionString` using semantic version comparison
 - States: `.idle` → `.checking` → `.available(version, downloadURL, releaseNotes)` / `.upToDate` / `.error(msg)`
@@ -107,7 +119,7 @@ dismissedUpdateVersion: String? // skip showing banner for this version (in Upda
 - UI: update banner in popover between projects and footer, "Check for Updates..." in right-click menu, update status in About dialog, auto-check toggle in Settings
 
 ### Data Flow
-`MonitorService` and `UpdateService` are created and owned by `AppDelegate`. Both are passed to `ContentView` (popover), `SettingsView` (dialog), and `AboutView` (dialog) via `.environmentObject()`. All state mutations happen on `@MainActor`. FSEvents callbacks dispatch to `@MainActor` via `Task`, debounce with 0.5s delay, then call `scan()`. Timer callbacks dispatch back to `@MainActor` via `Task`. Menubar icon/title updates are driven by a `Combine` subscriber on `monitor.$status`, `monitor.$totalSize`, and `monitor.$showSizeInMenuBar`.
+`MonitorService`, `UpdateService`, and `HistoryService` are created and owned by `AppDelegate`. All three are passed to `ContentView` (popover) and `SettingsView` (dialog) via `.environmentObject()`. `UpdateService` is also passed to `AboutView`. `HistoryService` is passed to `StatsView`. `MonitorService.onScanComplete` closure bridges scan results to `HistoryService.recordSnapshot()`. All state mutations happen on `@MainActor`. FSEvents callbacks dispatch to `@MainActor` via `Task`, debounce with 0.5s delay, then call `scan()`. Timer callbacks dispatch back to `@MainActor` via `Task`. Menubar icon/title updates are driven by a `Combine` subscriber on `monitor.$status`, `monitor.$totalSize`, and `monitor.$showSizeInMenuBar`. `HistoryService` saves to disk every 60s via its own timer, plus on `applicationWillTerminate`.
 
 ---
 
@@ -314,11 +326,13 @@ Version string appears in 2 files:
 | File / Directory | Purpose |
 |------------------|---------|
 | `Package.swift` | SPM package definition (macOS 13+, swift-tools-version 5.9) |
-| `Sources/ClaudeTmpMonitor/App.swift` | `@main` entry, `AppDelegate` with `NSStatusItem`, popover, right-click menu, Settings/About windows |
-| `Sources/ClaudeTmpMonitor/MonitorService.swift` | Monitoring logic, models, settings, notifications |
+| `Sources/ClaudeTmpMonitor/App.swift` | `@main` entry, `AppDelegate` with `NSStatusItem`, popover, right-click menu, Settings/About/Statistics windows |
+| `Sources/ClaudeTmpMonitor/MonitorService.swift` | Monitoring logic, models, settings, notifications, `onScanComplete` callback |
+| `Sources/ClaudeTmpMonitor/HistoryService.swift` | Historical data: snapshot recording, two-tier aggregation, JSON persistence, retention, querying |
 | `Sources/ClaudeTmpMonitor/UpdateService.swift` | Auto-update: GitHub releases API check, download, self-replacement |
-| `Sources/ClaudeTmpMonitor/ContentView.swift` | Main popover view (header, status, projects, update banner, footer) |
-| `Sources/ClaudeTmpMonitor/SettingsView.swift` | Settings dialog view |
+| `Sources/ClaudeTmpMonitor/ContentView.swift` | Main popover view (header, status, projects, update banner, footer with Stats button) |
+| `Sources/ClaudeTmpMonitor/StatsView.swift` | Statistics window: SwiftUI Charts area+line chart, time range picker, summary stats |
+| `Sources/ClaudeTmpMonitor/SettingsView.swift` | Settings dialog view (includes history retention) |
 | `Sources/ClaudeTmpMonitor/AboutView.swift` | About dialog view |
 | `Sources/ClaudeTmpMonitor/Resources/` | `MenuBarIcon.png`, `MenuBarIcon@2x.png`, `AppIcon.icns` |
 | `Info.plist` | App bundle config (`LSUIElement=true`, bundle ID `com.esison.claude-tmp-monitor`) |
