@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-03-15
+
+### Added
+
+- Statistics window with SwiftUI Charts: area + line chart of total temp directory size over time
+- Segmented time range picker (1h, 24h, 7d) with current/peak/average summary stats
+- HistoryService: records scan snapshots with two-tier aggregation (raw resolution ≤1h, 5-minute buckets beyond)
+- JSON persistence to `~/Library/Application Support/com.esison.claude-tmp-monitor/history.json` with 60s auto-save + save on quit
+- Configurable history retention (1–30 days, default 7) in Settings
+- "Stats" button in popover footer and "Statistics" item in right-click menu
+- Empty state in chart when fewer than 2 data points exist
+- `MonitorService.onScanComplete` callback to bridge scan results to HistoryService
+
 ## [0.2.0] - 2026-03-09
 
 ### Added

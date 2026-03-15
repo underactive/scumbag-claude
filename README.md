@@ -23,6 +23,7 @@ Claude Code writes task output to `/private/tmp/claude-*/` directories. These `.
 - **System notifications** -- alerts when files cross warning or critical size thresholds (fires once per file per threshold, not repeatedly)
 - **One-click cleanup** -- delete individual files, entire projects, clean all, or clean broken symlinks with inline confirmation
 - **Stale directory detection** -- flags project directories that haven't been modified in a configurable number of days
+- **Statistics & history** -- track total size over time with an area/line chart (1h/24h/7d ranges), current/peak/average summary stats, and configurable retention (1–30 days)
 - **Configurable thresholds** -- set your own warning/critical size limits, scan interval, and stale directory age
 - **Settings & About dialogs** -- dedicated settings window and right-click context menu with About dialog
 - **Launch at login** -- optional auto-start via macOS `ServiceManagement`
@@ -84,6 +85,7 @@ All settings are accessible from the menubar dropdown. Defaults:
 | Stale threshold | 7 days | Days before a project directory is considered stale |
 | Notifications | Enabled | System notification alerts on threshold crossings |
 | Show size in menu bar | Enabled | Display total disk usage next to the menubar icon |
+| History retention | 7 days | How long historical scan data is kept (1–30 days) |
 | Launch at login | Disabled | Start automatically when you log in |
 
 ## How it works

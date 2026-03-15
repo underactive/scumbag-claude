@@ -152,6 +152,28 @@
 - [ ] After cleanup, broken count updates and button disappears if no broken symlinks remain
 - [ ] Cleanup errors are shown in the footer as red text
 
+## Statistics Window
+- [ ] "Stats" button in footer opens the Statistics window
+- [ ] "Statistics" in right-click menu opens the Statistics window
+- [ ] Statistics window reuses existing window if already open
+- [ ] Statistics window is resizable
+- [ ] Time range picker switches between 1h, 24h, and 7d views
+- [ ] Current/Peak/Average summary values update when range changes
+- [ ] Chart shows area + line visualization of total size over time
+- [ ] X-axis shows HH:mm for 1h and 24h ranges, abbreviated weekday for 7d
+- [ ] Y-axis shows formatted byte values (KB, MB, GB)
+- [ ] Empty state message appears when fewer than 2 data points exist
+- [ ] After 2+ scans, chart populates with data points
+- [ ] Data persists in `~/Library/Application Support/com.esison.claude-tmp-monitor/history.json`
+- [ ] Quitting and relaunching preserves historical data in the chart
+- [ ] Deleting history.json and relaunching shows empty state
+- [ ] "History retention" setting in Settings accepts values between 1-30 days
+- [ ] History retention setting persists after closing and reopening Settings
+- [ ] Data older than retention period is pruned on save
+- [ ] Changing retention to 1 day while 7 days of data is loaded prunes old data on the next save
+- [ ] Data older than 1 hour is visibly coarser resolution (aggregated into 5-minute buckets)
+- [ ] Statistics window chart and time range picker are accessible via VoiceOver
+
 ## Notifications
 - [ ] Warning notification fires when a file crosses the warning threshold
 - [ ] Critical notification fires when a file crosses the critical threshold

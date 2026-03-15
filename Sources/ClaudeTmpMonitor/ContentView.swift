@@ -115,9 +115,11 @@ private struct PieSlice: Shape {
 struct ContentView: View {
     @EnvironmentObject var monitor: MonitorService
     @EnvironmentObject var updateService: UpdateService
+    @EnvironmentObject var historyService: HistoryService
     @State private var expandedProjects: Set<String> = []
     @State private var confirmDelete: DeleteConfirmation? = nil
     var onOpenSettings: () -> Void = {}
+    var onOpenStats: () -> Void = {}
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -540,6 +542,13 @@ struct ContentView: View {
                 }
                 .accessibilityLabel("Settings")
                 .keyboardShortcut(",", modifiers: .command)
+
+                Button(action: { onOpenStats() }) {
+                    Image(systemName: "chart.xyaxis.line")
+                    Text("Stats")
+                        .font(.subheadline)
+                }
+                .accessibilityLabel("Statistics")
 
                 Spacer()
 

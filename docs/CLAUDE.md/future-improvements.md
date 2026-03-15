@@ -10,7 +10,7 @@
 - [x] **Growth rate tracking** — Track file sizes across scans to show "growing at X MB/min." Useful for catching runaway agent output in real-time.
 - [x] **Symlink scope indicators** — Visually distinguish files where the symlink target is safe to delete (within `/private/tmp/claude-` or `~/.claude/projects/`) vs out-of-scope (symlink-only removal), so users know what cleanup actually does.
 - [x] **Deduplication visibility** — Show when multiple symlinks point to the same resolved file. The scan already deduplicates via `seenResolvedPaths` but this is invisible to the user.
-- [ ] **Statistics / historical graphs** — Track and display trends of temp file growth over time.
+- [x] **Statistics / historical graphs** — Track and display trends of temp file growth over time.
 - [ ] **Export or logging** — Export current state or view historical cleanup operations.
 - [ ] **Per-project file count in expanded view** — Total file count is shown in the status bar but not broken down per project.
 - [ ] **Claude directory display** — `claudeDir` is stored per project but not displayed in the UI (shows as UUID like "claude-12345").
