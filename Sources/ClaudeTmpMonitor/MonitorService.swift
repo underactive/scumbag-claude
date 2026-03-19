@@ -16,7 +16,9 @@ enum SettingsKey {
     static let lastUpdateCheckTime = "lastUpdateCheckTime"
     static let dismissedUpdateVersion = "dismissedUpdateVersion"
     static let historyRetentionDays = "historyRetentionDays"
-    static let watchdogEnabled = "watchdogEnabled"
+    static let watchdogEnabled = "watchdogEnabled"  // Legacy: migration only
+    static let watchdogFileOpsEnabled = "watchdogFileOpsEnabled"
+    static let watchdogCommandWatchdogEnabled = "watchdogCommandWatchdogEnabled"
     static let watchdogAllowedDirectories = "watchdogAllowedDirectories"
     static let watchdogBlockedCommands = "watchdogBlockedCommands"
 }

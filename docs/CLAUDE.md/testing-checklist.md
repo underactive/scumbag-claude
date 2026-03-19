@@ -175,7 +175,7 @@
 - [ ] Statistics window chart and time range picker are accessible via VoiceOver
 
 ## File Write Watchdog
-- [ ] "File Write Watchdog" toggle appears in Settings window under a divider
+- [ ] "File Operations" and "Blocked Commands" tabs appear in the Settings window TabView
 - [ ] Toggling watchdog on installs hook script and patches `~/.claude/settings.local.json`
 - [ ] Toggling watchdog off removes hook entry from `settings.local.json` and deletes script
 - [ ] Allowed directories list shows default "~/Development" entry
@@ -224,7 +224,7 @@
 - [ ] Hook allows `echo shutdown` (blocked command as argument, not at command position) with exit code 0
 - [ ] Removing all blocked commands results in an empty list and no commands are blocked
 - [ ] Modifying blocked commands while watchdog is disabled takes effect when subsequently enabled
-- [ ] Blocked commands UI section is hidden when watchdog toggle is off
+- [ ] Blocked commands list and add field are hidden when the Blocked Commands tab toggle is off
 - [ ] Pressing Enter in blocked command text field adds the command
 
 ## Notifications
@@ -232,3 +232,22 @@
 - [ ] Critical notification fires when a file crosses the critical threshold
 - [ ] Same file does not trigger duplicate notifications
 - [ ] Notifications for deleted files are cleared from tracking
+
+## Tabbed Settings / Split Watchdog Toggles
+- [ ] Settings window shows 3 tabs: General, File Operations, Blocked Commands
+- [ ] Tab switching works and each tab shows its own content
+- [ ] General tab contains threshold settings, toggles (show size, notifications, launch at login, auto-update)
+- [ ] File Operations tab: toggle enables/disables file ops watchdog independently
+- [ ] Blocked Commands tab: toggle enables/disables command watchdog independently
+- [ ] Enable file ops only → hook installed with matcher `Write|Edit|Bash`, script has directory checks but no blocked commands loop
+- [ ] Enable commands only → hook installed with matcher `Bash`, script has blocked commands loop but no directory checks
+- [ ] Enable both → hook installed with matcher `Write|Edit|Bash`, script has both sections
+- [ ] Disable both → hook fully uninstalled from settings.local.json
+- [ ] Migration: set old `watchdogEnabled=true` in UserDefaults, launch → both new toggles start enabled, old key removed
+- [ ] Help text visible only when the tab's toggle is enabled
+- [ ] Hook status indicator (green/red dot) appears on both File Operations and Blocked Commands tabs when either feature is enabled
+- [ ] Error messages from hook installation appear on both watchdog tabs
+- [ ] Enable file ops only, verify blocked commands (e.g., sudo) are allowed through (command watchdog is off)
+- [ ] Enable commands only, verify destructive file ops outside allowed dirs (e.g., rm /outside/path) are allowed through (file ops watchdog is off)
+- [ ] Enable file ops → disable file ops → enable commands: verify hook reinstalls with Bash-only matcher
+- [ ] When both toggles are off, hook status indicator is not shown on either watchdog tab
