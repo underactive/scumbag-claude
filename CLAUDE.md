@@ -18,7 +18,7 @@ Not applicable — this is a software-only macOS application.
 ## Architecture
 
 ### Core Files
-Eight-file SwiftUI app using a custom `NSStatusItem` for menubar integration.
+Nine-file SwiftUI app using a custom `NSStatusItem` for menubar integration.
 
 - `Sources/ClaudeTmpMonitor/App.swift` - Entry point: `@main` SwiftUI App with `NSApplicationDelegateAdaptor`. `AppDelegate` owns `MonitorService`, `UpdateService`, and `HistoryService`, creates `NSStatusItem` with `NSPopover` (left-click) and `NSMenu` (right-click). Manages singleton `NSWindow` instances for Settings, About, and Statistics dialogs. Uses `Combine` subscriber on `monitor.$status` + `monitor.$totalSize` to reactively update menubar icon and title. Wires `monitor.onScanComplete` callback to `HistoryService.recordSnapshot()`. Flushes history on `applicationWillTerminate`. Loads menubar icon from `Bundle.module` resources.
 - `Sources/ClaudeTmpMonitor/MonitorService.swift` - Core business logic: models (`MonitoredFile`, `ClaudeProject`, `MonitorStatus`), FSEvents + timer-based scanning, growth rate tracking, symlink scope/deduplication visibility, settings persistence, notifications, deletion. Exposes `onScanComplete` callback invoked at the end of each `scan()`.
@@ -26,8 +26,9 @@ Eight-file SwiftUI app using a custom `NSStatusItem` for menubar integration.
 - `Sources/ClaudeTmpMonitor/UpdateService.swift` - Auto-update logic: GitHub releases API checking, download with progress, self-replacement via shell script, version comparison. Persists settings via UserDefaults.
 - `Sources/ClaudeTmpMonitor/ContentView.swift` - Main popover view: header, status bar, expandable projects list with symlink scope/deduplication badges and broken symlink counts, update banner, footer with Settings button, Stats button, Clean Broken, Clean All, and Quit. Receives `onOpenSettings` and `onOpenStats` closures from `AppDelegate`. Defines `HoverButtonStyle` (custom `ButtonStyle` with configurable hover color) used by icon-only buttons.
 - `Sources/ClaudeTmpMonitor/StatsView.swift` - Statistics window: SwiftUI Charts area+line chart of total size over time, segmented time range picker (1h/24h/7d), current/peak/average summary stats, empty state. Hosted in a separate resizable `NSWindow`.
-- `Sources/ClaudeTmpMonitor/SettingsView.swift` - Settings dialog: threshold/interval rows, history retention row, notifications toggle, launch at login toggle. Hosted in a separate `NSWindow`.
+- `Sources/ClaudeTmpMonitor/SettingsView.swift` - Settings dialog: threshold/interval rows, history retention row, notifications toggle, launch at login toggle, watchdog section (toggle, directory allowlist, hook status). Hosted in a separate `NSWindow`.
 - `Sources/ClaudeTmpMonitor/AboutView.swift` - About dialog: app icon, name, version, update status, GitHub link. Hosted in a separate `NSWindow`.
+- `Sources/ClaudeTmpMonitor/WatchdogService.swift` - File write watchdog: manages Claude Code PreToolUse hook that blocks Write/Edit/Bash operations outside whitelisted directories. Generates bash hook script with JXA JSON parsing, patches `~/.claude/settings.local.json`, provides directory allowlist management. Settings persisted via UserDefaults.
 
 ### Dependencies
 - SwiftUI (views, `NSHostingController` for window content)
@@ -90,6 +91,8 @@ checkForUpdatesAutomatically: Bool // default: true (in UpdateService)
 lastUpdateCheckTime: Date?  // epoch stored in UserDefaults (in UpdateService)
 dismissedUpdateVersion: String? // skip showing banner for this version (in UpdateService)
 historyRetentionDays: Int       // default: 7, range: 1...30 (in HistoryService)
+watchdogEnabled: Bool           // default: false (in WatchdogService)
+watchdogAllowedDirectories: [String] // default: ["~/Development"] (in WatchdogService)
 ```
 - Saved to `UserDefaults` via `@Published var` with `didSet` persistence pattern
 - Default values loaded in `MonitorService.init()` using `defaults.object(forKey:) as? Type ?? fallback`
@@ -118,8 +121,23 @@ historyRetentionDays: Int       // default: 7, range: 1...30 (in HistoryService)
 - Users can dismiss a version (persisted as `dismissedUpdateVersion`); dismissed versions don't show the banner
 - UI: update banner in popover between projects and footer, "Check for Updates..." in right-click menu, update status in About dialog, auto-check toggle in Settings
 
+#### 7. File Write Watchdog (WatchdogService)
+- Manages a Claude Code PreToolUse hook that blocks Write/Edit/Bash operations outside user-whitelisted directories
+- **Settings**: `isEnabled` (default: false), `allowedDirectories` (default: `["~/Development"]`) — persisted via UserDefaults
+- **Hook script**: Generated bash script at `~/Library/Application Support/com.esison.claude-tmp-monitor/watchdog-hook.sh`
+  - Reads tool call JSON from stdin, parses via `osascript -l JavaScript` using `run(argv)` pattern (zero external dependencies)
+  - For Write/Edit: extracts `file_path`, resolves to absolute, checks against allowlist
+  - For Bash: detects destructive patterns (`rm`, `rmdir`, `unlink`, `mv`, `cp`, `ln`, `tee`, `dd`, `curl -o`, `wget -O`, `>`, `>>`, `chmod`, `chown`, `chflags`, `git clean`, `git checkout --`), extracts target paths, allows `/tmp` and `/private/tmp` unconditionally, checks other paths against allowlist. Non-destructive commands always allowed.
+  - **Block**: sends macOS notification via `osascript`, logs to `watchdog.log`, exits 2 with stderr message
+  - **Allow**: exits 0 silently
+  - **Fail-open**: if JXA parsing fails, exits 0 (safety net, not sandbox)
+- **Claude settings integration**: patches `~/.claude/settings.local.json` to add/remove PreToolUse hook entry (identified by `watchdog-hook.sh` in command path). Creates file/directory if absent. Atomic writes.
+- **Hook status**: `checkHookStatus()` verifies hook is present in `settings.local.json` (detects external removal)
+- **UI**: Watchdog section in SettingsView with toggle, directory list with add (`NSOpenPanel`) / remove controls, green/red hook status indicator
+- **Known limitation**: Bash parsing is best-effort — won't catch commands using variables (`rm $FILE`), subshells, or piped commands where the final target isn't visible
+
 ### Data Flow
-`MonitorService`, `UpdateService`, and `HistoryService` are created and owned by `AppDelegate`. All three are passed to `ContentView` (popover) and `SettingsView` (dialog) via `.environmentObject()`. `UpdateService` is also passed to `AboutView`. `HistoryService` is passed to `StatsView`. `MonitorService.onScanComplete` closure bridges scan results to `HistoryService.recordSnapshot()`. All state mutations happen on `@MainActor`. FSEvents callbacks dispatch to `@MainActor` via `Task`, debounce with 0.5s delay, then call `scan()`. Timer callbacks dispatch back to `@MainActor` via `Task`. Menubar icon/title updates are driven by a `Combine` subscriber on `monitor.$status`, `monitor.$totalSize`, and `monitor.$showSizeInMenuBar`. `HistoryService` saves to disk every 60s via its own timer, plus on `applicationWillTerminate`.
+`MonitorService`, `UpdateService`, `HistoryService`, and `WatchdogService` are created and owned by `AppDelegate`. `MonitorService`, `UpdateService`, and `HistoryService` are passed to `ContentView` (popover) and `SettingsView` (dialog) via `.environmentObject()`. `WatchdogService` is passed only to `SettingsView` (its only consumer). `UpdateService` is also passed to `AboutView`. `HistoryService` is passed to `StatsView`. `MonitorService.onScanComplete` closure bridges scan results to `HistoryService.recordSnapshot()`. All state mutations happen on `@MainActor`. FSEvents callbacks dispatch to `@MainActor` via `Task`, debounce with 0.5s delay, then call `scan()`. Timer callbacks dispatch back to `@MainActor` via `Task`. Menubar icon/title updates are driven by a `Combine` subscriber on `monitor.$status`, `monitor.$totalSize`, and `monitor.$showSizeInMenuBar`. `HistoryService` saves to disk every 60s via its own timer, plus on `applicationWillTerminate`. `WatchdogService` manages its own hook lifecycle — enabling/disabling writes the hook script and patches Claude settings synchronously.
 
 ---
 
@@ -165,6 +183,9 @@ No external services or third-party SDKs. All operations are local filesystem an
 4. **Gatekeeper quarantine on auto-update** — Downloaded update may trigger Gatekeeper re-validation. Mitigated by `xattr -cr` in the updater script, but users may see a brief security prompt.
 5. **No delta updates** — Auto-update downloads the full zip archive every time. No binary diff/patch mechanism.
 6. **No checksum verification on updates** — Downloaded zip is not verified against a SHA256 hash. Relies on HTTPS transport security.
+7. **Watchdog Bash parsing is best-effort** — The file write watchdog catches obvious destructive patterns (`rm /path`, `mv`, `>`) but won't catch commands using variables (`rm $FILE`), subshells, or piped commands where the final target isn't visible. Designed as a safety net, not a sandbox.
+8. **Watchdog hook persists independently** — If the app is uninstalled without disabling the watchdog, the hook entry remains in `~/.claude/settings.local.json` and will cause errors on every Claude tool call (script not found).
+9. **Watchdog JXA latency** — `osascript -l JavaScript` invocation adds ~50-100ms to each tool call. Acceptable for a pre-execution hook but noticeable with rapid tool calls.
 
 ---
 
@@ -332,7 +353,8 @@ Version string appears in 2 files:
 | `Sources/ClaudeTmpMonitor/UpdateService.swift` | Auto-update: GitHub releases API check, download, self-replacement |
 | `Sources/ClaudeTmpMonitor/ContentView.swift` | Main popover view (header, status, projects, update banner, footer with Stats button) |
 | `Sources/ClaudeTmpMonitor/StatsView.swift` | Statistics window: SwiftUI Charts area+line chart, time range picker, summary stats |
-| `Sources/ClaudeTmpMonitor/SettingsView.swift` | Settings dialog view (includes history retention) |
+| `Sources/ClaudeTmpMonitor/SettingsView.swift` | Settings dialog view (includes history retention, watchdog section) |
+| `Sources/ClaudeTmpMonitor/WatchdogService.swift` | File write watchdog: PreToolUse hook management, script generation, Claude settings patching |
 | `Sources/ClaudeTmpMonitor/AboutView.swift` | About dialog view |
 | `Sources/ClaudeTmpMonitor/Resources/` | `MenuBarIcon.png`, `MenuBarIcon@2x.png`, `AppIcon.icns` |
 | `Info.plist` | App bundle config (`LSUIElement=true`, bundle ID `com.esison.claude-tmp-monitor`) |

@@ -4,6 +4,7 @@
 
 - [ ] **Auto-cleanup policies** — Auto-delete files when they exceed thresholds or age out. The settings infrastructure already exists (threshold values in `MonitorService`); needs the action logic to trigger deletion. Could include "delete oldest first" smart cleanup.
 - [x] **FSEvents instead of polling** — Replace timer-based scanning with macOS `FSEvents` for instant detection and lower CPU usage. Current polling has 5–30 second detection latency depending on scan interval.
+- [x] **File Write Watchdog** — Claude Code PreToolUse hook that blocks Write/Edit/Bash operations outside whitelisted directories. Managed via Settings UI with directory allowlist.
 
 ## Intelligence / Visibility
 

@@ -174,6 +174,36 @@
 - [ ] Data older than 1 hour is visibly coarser resolution (aggregated into 5-minute buckets)
 - [ ] Statistics window chart and time range picker are accessible via VoiceOver
 
+## File Write Watchdog
+- [ ] "File Write Watchdog" toggle appears in Settings window under a divider
+- [ ] Toggling watchdog on installs hook script and patches `~/.claude/settings.local.json`
+- [ ] Toggling watchdog off removes hook entry from `settings.local.json` and deletes script
+- [ ] Allowed directories list shows default "~/Development" entry
+- [ ] "Add Directory" button opens folder picker, selected folder appears in list
+- [ ] Remove (−) button removes the directory from the list
+- [ ] Adding/removing directories regenerates the hook script with updated paths
+- [ ] Status indicator shows green "Hook installed" when hook is present in settings
+- [ ] Status indicator shows red "Hook not found" when hook is missing
+- [ ] Hook blocks Write tool targeting a file outside allowed directories (exit code 2)
+- [ ] Hook allows Write tool targeting a file inside allowed directories (exit code 0)
+- [ ] Hook blocks Edit tool targeting a file outside allowed directories
+- [ ] Hook allows Edit tool targeting a file inside allowed directories
+- [ ] Hook blocks Bash `rm` targeting a file outside allowed directories and /tmp
+- [ ] Hook allows Bash `rm` targeting /tmp or /private/tmp
+- [ ] Hook allows non-destructive Bash commands (ls, cat, echo) regardless of path
+- [ ] Blocked operations trigger a macOS notification with "Scumbag Claude Watchdog" title
+- [ ] Blocked operations are logged to `~/Library/Application Support/com.esison.claude-tmp-monitor/watchdog.log`
+- [ ] If JXA parsing fails (malformed input), hook allows the operation (fail-open)
+- [ ] Watchdog enabled state persists after app relaunch
+- [ ] Allowed directories list persists after app relaunch
+- [ ] Settings window height accommodates the watchdog section without overflow
+- [ ] Removing all directories from the allowlist causes all Write/Edit operations to be blocked
+- [ ] Pre-existing hooks in `settings.local.json` are preserved after watchdog install/uninstall
+- [ ] Enabling watchdog when `~/.claude` directory does not exist creates the directory
+- [ ] If `settings.local.json` contains invalid JSON, watchdog shows error and does not overwrite
+- [ ] Hook blocks Write with path traversal (`../`) targeting outside allowed directories
+- [ ] Directory with name prefix matching allowed dir (e.g. `/DevelopmentEvil`) is blocked
+
 ## Notifications
 - [ ] Warning notification fires when a file crosses the warning threshold
 - [ ] Critical notification fires when a file crosses the critical threshold
