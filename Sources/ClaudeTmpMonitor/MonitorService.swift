@@ -48,6 +48,8 @@ struct ClaudeProject: Identifiable {
     let files: [MonitoredFile]
     let lastModified: Date
     let isStale: Bool
+    /// True when the project was modified within the last 60 seconds, or any file is actively growing.
+    let isActive: Bool
     let claudeDir: String
 
     var growthRate: Double {
@@ -158,6 +160,7 @@ class MonitorService: ObservableObject {
     private var eventStream: FSEventStreamRef?
     private var debouncedScanTask: Task<Void, Never>?
     private static let trendChangeThreshold: UInt64 = 1024 // 1 KB dead zone to filter noise
+    private static let activeSessionThreshold: TimeInterval = 60 // seconds; project is "live" if modified more recently
     private var previousSizes: [String: (size: UInt64, time: Date)] = [:]
     private var previousTotalSize: UInt64?
     private var notifiedPaths: Set<String> = []
@@ -534,6 +537,8 @@ class MonitorService: ObservableObject {
                 let lastMod = files.map(\.lastModified).max() ?? Date.distantPast
                 let staleThreshold = TimeInterval(staleDaysThreshold * 86400)
                 let isStale = Date().timeIntervalSince(lastMod) > staleThreshold
+                let isActive = scanTime.timeIntervalSince(lastMod) < Self.activeSessionThreshold
+                    || files.contains(where: { ($0.growthRate ?? 0) > 0 })
 
                 let project = ClaudeProject(
                     path: projectPath,
@@ -543,6 +548,7 @@ class MonitorService: ObservableObject {
                     files: files.sorted { $0.size > $1.size },
                     lastModified: lastMod,
                     isStale: isStale,
+                    isActive: isActive,
                     claudeDir: claudeDir
                 )
                 foundProjects.append(project)
@@ -557,6 +563,7 @@ class MonitorService: ObservableObject {
             }
         }
         let hasDuplicates = resolvedPathCounts.values.contains { $0 > 1 }
+        // Rebuild projects with cross-project duplicate counts (keep in sync with ClaudeProject init above)
         if hasDuplicates {
             foundProjects = foundProjects.map { project in
                 ClaudeProject(
@@ -582,6 +589,7 @@ class MonitorService: ObservableObject {
                     },
                     lastModified: project.lastModified,
                     isStale: project.isStale,
+                    isActive: project.isActive,
                     claudeDir: project.claudeDir
                 )
             }
