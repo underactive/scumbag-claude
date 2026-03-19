@@ -173,6 +173,30 @@
 - [ ] Changing retention to 1 day while 7 days of data is loaded prunes old data on the next save
 - [ ] Data older than 1 hour is visibly coarser resolution (aggregated into 5-minute buckets)
 - [ ] Statistics window chart and time range picker are accessible via VoiceOver
+- [ ] Time range picker shows 4 segments: 1h, 24h, 7d, 30d (no clipping)
+- [ ] 1h range shows area+line chart (no regression from previous behavior)
+- [ ] 24h range shows stacked bar chart with hourly bars, color-coded by project
+- [ ] 7d range shows stacked bar chart with daily bars, color-coded by project
+- [ ] 30d range shows stacked bar chart with daily bars, color-coded by project
+- [ ] Hovering over a bar shows tooltip with date header, total size, and per-project rows (color dot, name, size, percentage)
+- [ ] Tooltip per-project rows are sorted by size descending
+- [ ] Moving mouse away from bars hides the tooltip
+- [ ] Tooltip stays within chart bounds (doesn't clip off edges)
+- [ ] Color legend below chart shows all project names with matching color dots
+- [ ] Legend wraps to multiple lines when there are many projects
+- [ ] Project colors are consistent across all bars in a single view
+- [ ] When 30d range is selected and history retention is <30 days, a hint message appears below the chart
+- [ ] When 30d range is selected and history retention is 30 days, no hint message appears
+- [ ] Summary row (Current/Peak/Average) works correctly for the 30d range
+- [ ] Empty state appears for 30d range when fewer than 2 data points exist
+- [ ] Statistics window is 700×550 (enlarged from previous 600×450)
+- [ ] Tooltip stays correctly positioned when window is resized wider or narrower than default 700px
+- [ ] When more than 12 projects exist, colors repeat and legend/tooltip still render correctly
+- [ ] Bar chart correctly represents project sizes when a project exists in some hours/days but not others (sparse presence)
+- [ ] Statistics chart renders correctly across daylight saving time transitions
+- [ ] Tooltip works when chart has only a single bar (e.g., 24h range with all data in one hour)
+- [ ] "Current" in summary row shows latest snapshot value regardless of selected time range; "Peak"/"Average" are range-scoped
+- [ ] Stacked bar chart, tooltip, and legend are navigable via VoiceOver
 
 ## File Write Watchdog
 - [ ] "File Operations" and "Blocked Commands" tabs appear in the Settings window TabView

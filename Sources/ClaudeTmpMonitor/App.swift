@@ -230,7 +230,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         window.title = "Statistics"
         window.styleMask = [.titled, .closable, .resizable]
         window.isReleasedWhenClosed = false
-        window.setContentSize(NSSize(width: 600, height: 450))
+        window.setContentSize(NSSize(width: 700, height: 550))
         window.center()
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
