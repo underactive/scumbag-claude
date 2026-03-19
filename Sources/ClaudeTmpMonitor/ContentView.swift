@@ -166,6 +166,11 @@ struct ContentView: View {
                 }
             }
 
+            if monitor.diskPressureDetected {
+                Divider()
+                diskPressureBannerSection
+            }
+
             if updateService.shouldShowBanner || updateService.status.isActiveUpdate {
                 Divider()
                 updateBannerSection
@@ -548,6 +553,28 @@ struct ContentView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 3)
+    }
+
+    // MARK: - Disk Pressure Banner
+
+    private var diskPressureBannerSection: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "externaldrive.badge.exclamationmark")
+                .foregroundColor(.orange)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Low Disk Space")
+                    .font(.subheadline.weight(.medium))
+                if let freeGB = monitor.availableDiskSpaceGB {
+                    Text(String(format: "%.1f GB free — %@ used by Claude tmp files", freeGB, formatBytes(monitor.totalSize)))
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+        .background(Color.orange.opacity(0.08))
     }
 
     // MARK: - Update Banner

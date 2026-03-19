@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-03-19
+
+### Added
+
+- **Disk pressure detection**: system-level disk space monitoring via APFS-aware `volumeAvailableCapacityForImportantUsageKey` API, checking available space during each scan cycle
+- Orange "Low Disk Space" banner in popover showing free space and Claude tmp usage when below configurable threshold (default: 10 GB)
+- Episode-based notification dedup: fires once per pressure episode, resets on recovery; respects `notificationsEnabled` toggle
+- Fail-open design: if volume query fails, no false alarm or banner
+- New settings: `diskPressureEnabled` (default: true), `diskPressureThresholdGB` (default: 10, range: 1–500 GB) with toggle and conditional threshold row in Settings General tab
+- **Active session detection**: projects with files modified within 60 seconds or actively growing show a pulsing green "live" badge with tooltip
+- "stale" and "live" badges are mutually exclusive (active takes precedence)
+- **Menubar trend indicator**: ↑/↓ arrows next to size in menubar showing whether total monitored size is growing or shrinking between scans, with 1 KB dead zone to filter noise
+
 ## [0.4.4] - 2026-03-19
 
 ### Added
