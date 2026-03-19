@@ -22,9 +22,8 @@
 - [ ] **Configurable project name extraction** — Replace the hardcoded `skipWords` set in `extractProjectName()` with something that works for any user (e.g., infer from path depth, or let users set a project root).
 - [x] **Search / filter projects** — Add a filter field for finding specific projects when the list is long.
 - [x] **Sort options** — Files are always sorted by size descending. Add sort by name or modification date.
-- [ ] **Show file modification timestamps** — The data is already collected (`lastModified` on `MonitoredFile`) but never displayed in the UI.
-- [ ] **File preview or open** — View file contents or open them in an editor from the app.
-- [ ] **Batch operations on files** — Allow deleting individual files in bulk, not just entire projects.
+- [x] **Show file modification timestamps** — The data is already collected (`lastModified` on `MonitoredFile`) but never displayed in the UI.
+- [x] **Batch operations on files** — Allow deleting individual files in bulk, not just entire projects.
 - [ ] **Keyboard shortcuts for project actions** — Only global shortcuts exist (Cmd+R, Cmd+,, Cmd+Q). No keyboard shortcuts for project-level actions.
 - [ ] **Favorite or ignore projects** — Prioritize monitoring certain projects or exclude others from scanning.
 - [ ] **Stale threshold explanation** — Add a tooltip or explanation for the stale threshold setting, which isn't obvious in the UI.

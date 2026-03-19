@@ -281,6 +281,36 @@ class MonitorService: ObservableObject {
         scan()
     }
 
+    func deleteFiles(_ files: [MonitoredFile]) {
+        guard !files.isEmpty else { return }
+        lastDeleteError = nil
+        let fm = FileManager.default
+        var errors: [String] = []
+        var deletedTargets = Set<String>()
+        for file in files {
+            if file.isSymlink && !file.isBrokenSymlink {
+                if isInAllowedDeletionScope(file.resolvedPath) && !deletedTargets.contains(file.resolvedPath) {
+                    do {
+                        try fm.removeItem(atPath: file.resolvedPath)
+                        deletedTargets.insert(file.resolvedPath)
+                    } catch {
+                        errors.append("target of \(file.name): \(error.localizedDescription)")
+                    }
+                }
+            }
+            do {
+                try fm.removeItem(atPath: file.path)
+            } catch {
+                errors.append("\(file.name): \(error.localizedDescription)")
+            }
+            notifiedPaths.remove(file.path)
+        }
+        if !errors.isEmpty {
+            lastDeleteError = "Failed to delete: \(errors.joined(separator: ", "))"
+        }
+        scan()
+    }
+
     func deleteBrokenSymlinks() {
         lastDeleteError = nil
         let fm = FileManager.default
@@ -737,7 +767,23 @@ class MonitorService: ObservableObject {
     }
 }
 
-// MARK: - Byte Formatting
+// MARK: - Formatting Helpers
+
+private let _relativeTimeDateFormatter: DateFormatter = {
+    let f = DateFormatter()
+    f.dateFormat = "MMM d"
+    return f
+}()
+
+func relativeTime(_ date: Date) -> String {
+    let seconds = -date.timeIntervalSinceNow
+    guard seconds > 0 else { return "now" }
+    if seconds < 60 { return "now" }
+    if seconds < 3600 { return "\(Int(seconds / 60))m" }
+    if seconds < 86400 { return "\(Int(seconds / 3600))h" }
+    if seconds < 604800 { return "\(Int(seconds / 86400))d" } // 7 days
+    return _relativeTimeDateFormatter.string(from: date)
+}
 
 func formatBytes(_ bytes: UInt64) -> String {
     ByteCountFormatter.string(fromByteCount: Int64(clamping: bytes), countStyle: .file)
