@@ -17,6 +17,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - "Stats" button in popover footer and "Statistics" item in right-click menu
 - Empty state in chart when fewer than 2 data points exist
 - `MonitorService.onScanComplete` callback to bridge scan results to HistoryService
+- **File Write Watchdog**: Claude Code PreToolUse hook that blocks Write/Edit/Bash operations targeting files outside user-whitelisted directories
+- Watchdog section in Settings: toggle, directory allowlist with folder picker, hook installation status indicator
+- WatchdogService: generates bash hook script with JXA (`osascript -l JavaScript`) JSON parsing, patches `~/.claude/settings.local.json`
+- Bash destructive pattern detection: `rm`, `rmdir`, `unlink`, `mv`, `cp`, `ln`, `tee`, `dd`, `curl -o`, `wget -O`, `>`, `>>`, `chmod`, `chown`, `chflags`, `git clean`, `git checkout --`
+- Pure-string path normalization to prevent `..` traversal bypasses
+- Trailing-slash prefix matching to prevent directory name confusion (e.g. `/DevelopmentEvil` vs `/Development`)
+- macOS notifications and logging for blocked operations (`watchdog.log`)
+- Fail-open design: hook allows operations if JSON parsing fails
+- `matcher` field in hook entry restricts invocation to Write/Edit/Bash tools only
+- Guard against corrupted `settings.local.json`: refuses to overwrite invalid JSON
 
 ## [0.2.0] - 2026-03-09
 
