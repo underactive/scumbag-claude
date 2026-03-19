@@ -16,6 +16,8 @@ enum SettingsKey {
     static let lastUpdateCheckTime = "lastUpdateCheckTime"
     static let dismissedUpdateVersion = "dismissedUpdateVersion"
     static let historyRetentionDays = "historyRetentionDays"
+    static let watchdogEnabled = "watchdogEnabled"
+    static let watchdogAllowedDirectories = "watchdogAllowedDirectories"
 }
 
 // MARK: - Models

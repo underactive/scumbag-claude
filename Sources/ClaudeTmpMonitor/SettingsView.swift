@@ -1,9 +1,11 @@
 import SwiftUI
+import AppKit
 
 struct SettingsView: View {
     @EnvironmentObject var monitor: MonitorService
     @EnvironmentObject var updateService: UpdateService
     @EnvironmentObject var historyService: HistoryService
+    @EnvironmentObject var watchdogService: WatchdogService
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -37,8 +39,98 @@ struct SettingsView: View {
 
             Toggle("Check for updates automatically", isOn: $updateService.checkForUpdatesAutomatically)
                 .font(.subheadline)
+
+            Divider()
+                .padding(.vertical, 4)
+
+            watchdogSection
         }
         .padding(20)
+    }
+
+    // MARK: - Watchdog Section
+
+    private var watchdogSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Toggle("File Write Watchdog", isOn: $watchdogService.isEnabled)
+                .font(.subheadline)
+
+            if watchdogService.isEnabled {
+                Text("Allowed directories:")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+
+                VStack(spacing: 0) {
+                    ForEach(Array(watchdogService.allowedDirectories.enumerated()), id: \.offset) { index, dir in
+                        HStack {
+                            Text(dir)
+                                .font(.system(.caption, design: .monospaced))
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                            Spacer()
+                            Button(action: { watchdogService.removeDirectory(at: index) }) {
+                                Image(systemName: "minus.circle")
+                                    .font(.caption)
+                                    .foregroundColor(.red)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        if index < watchdogService.allowedDirectories.count - 1 {
+                            Divider()
+                        }
+                    }
+                }
+                .background(Color(nsColor: .controlBackgroundColor))
+                .cornerRadius(6)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .stroke(Color(nsColor: .separatorColor), lineWidth: 0.5)
+                )
+
+                Button(action: addDirectoryViaPanel) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "plus")
+                        Text("Add Directory")
+                    }
+                    .font(.caption)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(watchdogService.hookInstalled ? Color.green : Color.red)
+                        .frame(width: 6, height: 6)
+                    Text(watchdogService.hookInstalled ? "Hook installed" : "Hook not found")
+                        .font(.caption)
+                        .foregroundColor(watchdogService.hookInstalled ? .green : .red)
+                }
+
+                if let error = watchdogService.lastError {
+                    Text(error)
+                        .font(.caption)
+                        .foregroundColor(.red)
+                        .lineLimit(2)
+                }
+            }
+        }
+    }
+
+    // MARK: - Helpers
+
+    private func addDirectoryViaPanel() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        panel.message = "Choose a directory to allow Claude Code to write to"
+        panel.prompt = "Add"
+
+        if panel.runModal() == .OK, let url = panel.url {
+            watchdogService.addDirectory(url.path)
+        }
     }
 
     private func settingRow(_ label: String, value: Binding<Int>, unit: String) -> some View {

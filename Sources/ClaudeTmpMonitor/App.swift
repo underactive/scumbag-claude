@@ -10,6 +10,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     let monitor = MonitorService()
     let updateService = UpdateService()
     let historyService = HistoryService()
+    let watchdogService = WatchdogService()
     private var cancellables = Set<AnyCancellable>()
     private var settingsWindow: NSWindow?
     private var aboutWindow: NSWindow?
@@ -197,13 +198,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             .environmentObject(monitor)
             .environmentObject(updateService)
             .environmentObject(historyService)
+            .environmentObject(watchdogService)
         let hostingController = NSHostingController(rootView: settingsView)
 
         let window = NSWindow(contentViewController: hostingController)
         window.title = "Settings"
         window.styleMask = [.titled, .closable]
         window.isReleasedWhenClosed = false
-        window.setContentSize(NSSize(width: 350, height: 330))
+        window.setContentSize(NSSize(width: 350, height: 450))
         window.center()
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
