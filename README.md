@@ -24,7 +24,7 @@ Claude Code writes task output to `/private/tmp/claude-*/` directories. These `.
 - **One-click cleanup** -- delete individual files, entire projects, clean all, or clean broken symlinks with inline confirmation
 - **Stale directory detection** -- flags project directories that haven't been modified in a configurable number of days
 - **Statistics & history** -- track total size over time with an area/line chart (1h/24h/7d ranges), current/peak/average summary stats, and configurable retention (1–30 days)
-- **File write watchdog** -- Claude Code PreToolUse hook that blocks Write/Edit/Bash operations targeting files outside user-whitelisted directories, with macOS notifications for blocked attempts
+- **File write watchdog** -- Claude Code PreToolUse hook that blocks Write/Edit/Bash operations targeting files outside user-whitelisted directories, plus a configurable blocked commands list (e.g., `sudo`, `passwd`, `shutdown`) that rejects inherently dangerous commands regardless of directory, with macOS notifications for blocked attempts
 - **Configurable thresholds** -- set your own warning/critical size limits, scan interval, and stale directory age
 - **Settings & About dialogs** -- dedicated settings window and right-click context menu with About dialog
 - **Launch at login** -- optional auto-start via macOS `ServiceManagement`

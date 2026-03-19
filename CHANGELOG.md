@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.1] - 2026-03-19
+
+### Added
+
+- Configurable blocked commands list in file write watchdog: inherently dangerous commands (`passwd`, `sudo`, `su`, `shutdown`, `reboot`, `halt`, `poweroff`, `mkfs`, `newfs`, `diskutil`, `csrutil`, `nvram`, `dscl`) are rejected regardless of target directory
+- Position-aware regex matching `(^\s*|[|;&]\s*)cmd(\s|$)` avoids false positives on path arguments (e.g., `cat /etc/passwd` is allowed)
+- Blocked commands UI in Settings: scrollable list with inline remove buttons, text field + "Add" button
+- Input validation restricts command names to `[a-zA-Z0-9_-]` to prevent regex/shell injection
+- Load-time sanitization filters invalid command names from UserDefaults
+
+### Changed
+
+- Settings window is now resizable to accommodate blocked commands list
+- Watchdog hook script includes `BLOCKED_CMDS` check before destructive pattern detection
+
 ## [0.4.0] - 2026-03-15
 
 ### Added

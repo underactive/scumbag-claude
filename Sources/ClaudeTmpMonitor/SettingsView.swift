@@ -99,6 +99,8 @@ struct SettingsView: View {
                 .buttonStyle(.bordered)
                 .controlSize(.small)
 
+                blockedCommandsSection
+
                 HStack(spacing: 4) {
                     Circle()
                         .fill(watchdogService.hookInstalled ? Color.green : Color.red)
@@ -116,6 +118,70 @@ struct SettingsView: View {
                 }
             }
         }
+    }
+
+    // MARK: - Blocked Commands Section
+
+    @State private var newBlockedCommand: String = ""
+
+    private var blockedCommandsSection: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Blocked commands:")
+                .font(.caption)
+                .foregroundColor(.secondary)
+
+            VStack(spacing: 0) {
+                ForEach(Array(watchdogService.blockedCommands.enumerated()), id: \.offset) {
+                    index, cmd in
+                    HStack {
+                        Text(cmd)
+                            .font(.system(.caption, design: .monospaced))
+                            .lineLimit(1)
+                        Spacer()
+                        Button(action: { watchdogService.removeBlockedCommand(at: index) }) {
+                            Image(systemName: "minus.circle")
+                                .font(.caption)
+                                .foregroundColor(.red)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    if index < watchdogService.blockedCommands.count - 1 {
+                        Divider()
+                    }
+                }
+            }
+            .background(Color(nsColor: .controlBackgroundColor))
+            .cornerRadius(6)
+            .overlay(
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(Color(nsColor: .separatorColor), lineWidth: 0.5)
+            )
+
+            HStack(spacing: 4) {
+                TextField("Command name", text: $newBlockedCommand)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(.caption, design: .monospaced))
+                    .frame(maxWidth: 150)
+                    .onSubmit { addBlockedCommandFromField() }
+                Button(action: addBlockedCommandFromField) {
+                    HStack(spacing: 4) {
+                        Image(systemName: "plus")
+                        Text("Add")
+                    }
+                    .font(.caption)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .disabled(newBlockedCommand.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        }
+    }
+
+    private func addBlockedCommandFromField() {
+        watchdogService.addBlockedCommand(newBlockedCommand)
+        newBlockedCommand = ""
     }
 
     // MARK: - Helpers

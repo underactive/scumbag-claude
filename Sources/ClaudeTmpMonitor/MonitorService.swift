@@ -18,6 +18,7 @@ enum SettingsKey {
     static let historyRetentionDays = "historyRetentionDays"
     static let watchdogEnabled = "watchdogEnabled"
     static let watchdogAllowedDirectories = "watchdogAllowedDirectories"
+    static let watchdogBlockedCommands = "watchdogBlockedCommands"
 }
 
 // MARK: - Models

@@ -4,7 +4,7 @@
 
 **Scumbag Claude** (aka Claude Tmp Monitor) is a macOS menubar application that monitors Claude Code's temporary file directories (`/private/tmp/claude-*/`) for large `.output` files and stale task directories, alerting the user and providing quick cleanup actions.
 
-**Current Version:** 0.4.0
+**Current Version:** 0.4.1
 **Status:** In development
 
 ---
@@ -93,6 +93,7 @@ dismissedUpdateVersion: String? // skip showing banner for this version (in Upda
 historyRetentionDays: Int       // default: 7, range: 1...30 (in HistoryService)
 watchdogEnabled: Bool           // default: false (in WatchdogService)
 watchdogAllowedDirectories: [String] // default: ["~/Development"] (in WatchdogService)
+watchdogBlockedCommands: [String]    // default: ["passwd","sudo","su","shutdown","reboot","halt","poweroff","mkfs","newfs","diskutil","csrutil","nvram","dscl"] (in WatchdogService)
 ```
 - Saved to `UserDefaults` via `@Published var` with `didSet` persistence pattern
 - Default values loaded in `MonitorService.init()` using `defaults.object(forKey:) as? Type ?? fallback`
@@ -123,17 +124,17 @@ watchdogAllowedDirectories: [String] // default: ["~/Development"] (in WatchdogS
 
 #### 7. File Write Watchdog (WatchdogService)
 - Manages a Claude Code PreToolUse hook that blocks Write/Edit/Bash operations outside user-whitelisted directories
-- **Settings**: `isEnabled` (default: false), `allowedDirectories` (default: `["~/Development"]`) — persisted via UserDefaults
+- **Settings**: `isEnabled` (default: false), `allowedDirectories` (default: `["~/Development"]`), `blockedCommands` (default: passwd, sudo, su, shutdown, reboot, halt, poweroff, mkfs, newfs, diskutil, csrutil, nvram, dscl) — persisted via UserDefaults
 - **Hook script**: Generated bash script at `~/Library/Application Support/com.esison.claude-tmp-monitor/watchdog-hook.sh`
   - Reads tool call JSON from stdin, parses via `osascript -l JavaScript` using `run(argv)` pattern (zero external dependencies)
   - For Write/Edit: extracts `file_path`, resolves to absolute, checks against allowlist
-  - For Bash: detects destructive patterns (`rm`, `rmdir`, `unlink`, `mv`, `cp`, `ln`, `tee`, `dd`, `curl -o`, `wget -O`, `>`, `>>`, `chmod`, `chown`, `chflags`, `git clean`, `git checkout --`), extracts target paths, allows `/tmp` and `/private/tmp` unconditionally, checks other paths against allowlist. Non-destructive commands always allowed.
+  - For Bash: first checks command against blocked commands list (e.g., `passwd`, `sudo`, `shutdown`) using position-aware regex `(^\s*|[|;&]\s*)cmd(\s|$)` — rejects regardless of directory. Then detects destructive patterns (`rm`, `rmdir`, `unlink`, `mv`, `cp`, `ln`, `tee`, `dd`, `curl -o`, `wget -O`, `>`, `>>`, `chmod`, `chown`, `chflags`, `git clean`, `git checkout --`), extracts target paths, allows `/tmp` and `/private/tmp` unconditionally, checks other paths against allowlist. Non-destructive commands always allowed.
   - **Block**: sends macOS notification via `osascript`, logs to `watchdog.log`, exits 2 with stderr message
   - **Allow**: exits 0 silently
   - **Fail-open**: if JXA parsing fails, exits 0 (safety net, not sandbox)
 - **Claude settings integration**: patches `~/.claude/settings.local.json` to add/remove PreToolUse hook entry (identified by `watchdog-hook.sh` in command path). Creates file/directory if absent. Atomic writes.
 - **Hook status**: `checkHookStatus()` verifies hook is present in `settings.local.json` (detects external removal)
-- **UI**: Watchdog section in SettingsView with toggle, directory list with add (`NSOpenPanel`) / remove controls, green/red hook status indicator
+- **UI**: Watchdog section in SettingsView with toggle, directory allowlist with add (`NSOpenPanel`) / remove controls, blocked commands list with inline text field add / remove controls, green/red hook status indicator
 - **Known limitation**: Bash parsing is best-effort — won't catch commands using variables (`rm $FILE`), subshells, or piped commands where the final target isn't visible
 
 ### Data Flow
