@@ -8,11 +8,21 @@ struct SettingsView: View {
     @EnvironmentObject var watchdogService: WatchdogService
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("Settings")
-                .font(.headline)
-                .padding(.bottom, 4)
+        TabView {
+            generalTab
+                .tabItem { Label("General", systemImage: "gear") }
+            fileOpsTab
+                .tabItem { Label("File Operations", systemImage: "folder.badge.gearshape") }
+            blockedCommandsTab
+                .tabItem { Label("Blocked Commands", systemImage: "nosign") }
+        }
+        .padding(12)
+    }
 
+    // MARK: - General Tab
+
+    private var generalTab: some View {
+        VStack(alignment: .leading, spacing: 8) {
             settingRow("Warning threshold", value: $monitor.warningThresholdMB, unit: "MB")
             settingRow("Critical threshold", value: $monitor.criticalThresholdMB, unit: "MB")
             settingRow("Scan interval", value: $monitor.scanIntervalSeconds, unit: "sec")
@@ -40,28 +50,31 @@ struct SettingsView: View {
             Toggle("Check for updates automatically", isOn: $updateService.checkForUpdatesAutomatically)
                 .font(.subheadline)
 
-            Divider()
-                .padding(.vertical, 4)
-
-            watchdogSection
+            Spacer()
         }
-        .padding(20)
+        .padding(8)
     }
 
-    // MARK: - Watchdog Section
+    // MARK: - File Operations Tab
 
-    private var watchdogSection: some View {
+    private var fileOpsTab: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Toggle("File Write Watchdog", isOn: $watchdogService.isEnabled)
+            Toggle("Enable file operations watchdog", isOn: $watchdogService.fileOpsEnabled)
                 .font(.subheadline)
 
-            if watchdogService.isEnabled {
+            if watchdogService.fileOpsEnabled {
+                Text("Monitors Write, Edit, and Bash tool calls to ensure Claude Code's file operations stay within allowed directories. Destructive commands (rm, mv, cp, chmod, etc.) targeting files outside the directories below are blocked with a notification. Files in /tmp and /private/tmp are always allowed.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
                 Text("Allowed directories:")
                     .font(.caption)
                     .foregroundColor(.secondary)
+                    .padding(.top, 4)
 
                 VStack(spacing: 0) {
-                    ForEach(Array(watchdogService.allowedDirectories.enumerated()), id: \.offset) { index, dir in
+                    ForEach(Array(watchdogService.allowedDirectories.enumerated()), id: \.element) { index, dir in
                         HStack {
                             Text(dir)
                                 .font(.system(.caption, design: .monospaced))
@@ -98,93 +111,119 @@ struct SettingsView: View {
                 }
                 .buttonStyle(.bordered)
                 .controlSize(.small)
-
-                blockedCommandsSection
-
-                HStack(spacing: 4) {
-                    Circle()
-                        .fill(watchdogService.hookInstalled ? Color.green : Color.red)
-                        .frame(width: 6, height: 6)
-                    Text(watchdogService.hookInstalled ? "Hook installed" : "Hook not found")
-                        .font(.caption)
-                        .foregroundColor(watchdogService.hookInstalled ? .green : .red)
-                }
-
-                if let error = watchdogService.lastError {
-                    Text(error)
-                        .font(.caption)
-                        .foregroundColor(.red)
-                        .lineLimit(2)
-                }
             }
+
+            Spacer()
+
+            hookStatusView
         }
+        .padding(8)
     }
 
-    // MARK: - Blocked Commands Section
+    // MARK: - Blocked Commands Tab
 
     @State private var newBlockedCommand: String = ""
 
-    private var blockedCommandsSection: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text("Blocked commands:")
-                .font(.caption)
-                .foregroundColor(.secondary)
+    private var blockedCommandsTab: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Toggle("Enable command watchdog", isOn: $watchdogService.commandWatchdogEnabled)
+                .font(.subheadline)
 
-            VStack(spacing: 0) {
-                ForEach(Array(watchdogService.blockedCommands.enumerated()), id: \.offset) {
-                    index, cmd in
-                    HStack {
-                        Text(cmd)
-                            .font(.system(.caption, design: .monospaced))
-                            .lineLimit(1)
-                        Spacer()
-                        Button(action: { watchdogService.removeBlockedCommand(at: index) }) {
-                            Image(systemName: "minus.circle")
-                                .font(.caption)
-                                .foregroundColor(.red)
+            if watchdogService.commandWatchdogEnabled {
+                Text("Blocks dangerous system commands from being executed by Claude Code, regardless of target directory. Commands are matched at command positions in the shell line (after |, ;, or &). This catches \"sudo rm -rf /\" but won't catch indirect invocations via variables or subshells.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text("Blocked commands:")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .padding(.top, 4)
+
+                VStack(spacing: 0) {
+                    ForEach(Array(watchdogService.blockedCommands.enumerated()), id: \.element) {
+                        index, cmd in
+                        HStack {
+                            Text(cmd)
+                                .font(.system(.caption, design: .monospaced))
+                                .lineLimit(1)
+                            Spacer()
+                            Button(action: { watchdogService.removeBlockedCommand(at: index) }) {
+                                Image(systemName: "minus.circle")
+                                    .font(.caption)
+                                    .foregroundColor(.red)
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        if index < watchdogService.blockedCommands.count - 1 {
+                            Divider()
+                        }
                     }
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    if index < watchdogService.blockedCommands.count - 1 {
-                        Divider()
+                }
+                .background(Color(nsColor: .controlBackgroundColor))
+                .cornerRadius(6)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .stroke(Color(nsColor: .separatorColor), lineWidth: 0.5)
+                )
+
+                HStack(spacing: 4) {
+                    TextField("Command name", text: $newBlockedCommand)
+                        .textFieldStyle(.roundedBorder)
+                        .font(.system(.caption, design: .monospaced))
+                        .frame(maxWidth: 150)
+                        .onSubmit { addBlockedCommandFromField() }
+                    Button(action: addBlockedCommandFromField) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "plus")
+                            Text("Add")
+                        }
+                        .font(.caption)
                     }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .disabled(newBlockedCommand.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
             }
-            .background(Color(nsColor: .controlBackgroundColor))
-            .cornerRadius(6)
-            .overlay(
-                RoundedRectangle(cornerRadius: 6)
-                    .stroke(Color(nsColor: .separatorColor), lineWidth: 0.5)
-            )
 
+            Spacer()
+
+            hookStatusView
+        }
+        .padding(8)
+    }
+
+    // MARK: - Shared Hook Status
+
+    @ViewBuilder
+    private var hookStatusView: some View {
+        if watchdogService.hookShouldBeInstalled {
             HStack(spacing: 4) {
-                TextField("Command name", text: $newBlockedCommand)
-                    .textFieldStyle(.roundedBorder)
-                    .font(.system(.caption, design: .monospaced))
-                    .frame(maxWidth: 150)
-                    .onSubmit { addBlockedCommandFromField() }
-                Button(action: addBlockedCommandFromField) {
-                    HStack(spacing: 4) {
-                        Image(systemName: "plus")
-                        Text("Add")
-                    }
+                Circle()
+                    .fill(watchdogService.hookInstalled ? Color.green : Color.red)
+                    .frame(width: 6, height: 6)
+                Text(watchdogService.hookInstalled ? "Hook installed" : "Hook not found")
                     .font(.caption)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .disabled(newBlockedCommand.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .foregroundColor(watchdogService.hookInstalled ? .green : .red)
+            }
+
+            if let error = watchdogService.lastError {
+                Text(error)
+                    .font(.caption)
+                    .foregroundColor(.red)
+                    .lineLimit(2)
             }
         }
     }
+
+    // MARK: - Helpers
 
     private func addBlockedCommandFromField() {
         watchdogService.addBlockedCommand(newBlockedCommand)
         newBlockedCommand = ""
     }
-
-    // MARK: - Helpers
 
     private func addDirectoryViaPanel() {
         let panel = NSOpenPanel()

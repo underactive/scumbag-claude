@@ -205,7 +205,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         window.title = "Settings"
         window.styleMask = [.titled, .closable, .resizable]
         window.isReleasedWhenClosed = false
-        window.setContentSize(NSSize(width: 350, height: 550))
+        window.setContentSize(NSSize(width: 420, height: 480))
         window.center()
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)

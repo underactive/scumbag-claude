@@ -4,7 +4,7 @@
 
 **Scumbag Claude** (aka Claude Tmp Monitor) is a macOS menubar application that monitors Claude Code's temporary file directories (`/private/tmp/claude-*/`) for large `.output` files and stale task directories, alerting the user and providing quick cleanup actions.
 
-**Current Version:** 0.4.1
+**Current Version:** 0.4.2
 **Status:** In development
 
 ---
@@ -26,9 +26,9 @@ Nine-file SwiftUI app using a custom `NSStatusItem` for menubar integration.
 - `Sources/ClaudeTmpMonitor/UpdateService.swift` - Auto-update logic: GitHub releases API checking, download with progress, self-replacement via shell script, version comparison. Persists settings via UserDefaults.
 - `Sources/ClaudeTmpMonitor/ContentView.swift` - Main popover view: header, status bar, expandable projects list with symlink scope/deduplication badges and broken symlink counts, update banner, footer with Settings button, Stats button, Clean Broken, Clean All, and Quit. Receives `onOpenSettings` and `onOpenStats` closures from `AppDelegate`. Defines `HoverButtonStyle` (custom `ButtonStyle` with configurable hover color) used by icon-only buttons.
 - `Sources/ClaudeTmpMonitor/StatsView.swift` - Statistics window: SwiftUI Charts area+line chart of total size over time, segmented time range picker (1h/24h/7d), current/peak/average summary stats, empty state. Hosted in a separate resizable `NSWindow`.
-- `Sources/ClaudeTmpMonitor/SettingsView.swift` - Settings dialog: threshold/interval rows, history retention row, notifications toggle, launch at login toggle, watchdog section (toggle, directory allowlist, hook status). Hosted in a separate `NSWindow`.
+- `Sources/ClaudeTmpMonitor/SettingsView.swift` - Settings dialog with TabView containing 3 tabs: General (threshold/interval rows, history retention, notifications toggle, launch at login toggle), File Operations (file write watchdog toggle, directory allowlist, hook status), and Blocked Commands (command watchdog toggle, blocked commands list). Hosted in a separate `NSWindow`.
 - `Sources/ClaudeTmpMonitor/AboutView.swift` - About dialog: app icon, name, version, update status, GitHub link. Hosted in a separate `NSWindow`.
-- `Sources/ClaudeTmpMonitor/WatchdogService.swift` - File write watchdog: manages Claude Code PreToolUse hook that blocks Write/Edit/Bash operations outside whitelisted directories. Generates bash hook script with JXA JSON parsing, patches `~/.claude/settings.local.json`, provides directory allowlist management. Settings persisted via UserDefaults.
+- `Sources/ClaudeTmpMonitor/WatchdogService.swift` - File write watchdog: manages Claude Code PreToolUse hook that blocks Write/Edit/Bash operations outside whitelisted directories. Two independent feature toggles: `fileOpsEnabled` (Write/Edit + destructive Bash) and `commandWatchdogEnabled` (blocked commands). `hookShouldBeInstalled` computed property returns true when either is enabled; `reconcileHookState()` installs/removes the hook accordingly. Generates bash hook script with JXA JSON parsing, patches `~/.claude/settings.local.json`, provides directory allowlist management. Migrates legacy `watchdogEnabled` key on init. Settings persisted via UserDefaults.
 
 ### Dependencies
 - SwiftUI (views, `NSHostingController` for window content)
@@ -91,7 +91,8 @@ checkForUpdatesAutomatically: Bool // default: true (in UpdateService)
 lastUpdateCheckTime: Date?  // epoch stored in UserDefaults (in UpdateService)
 dismissedUpdateVersion: String? // skip showing banner for this version (in UpdateService)
 historyRetentionDays: Int       // default: 7, range: 1...30 (in HistoryService)
-watchdogEnabled: Bool           // default: false (in WatchdogService)
+watchdogFileOpsEnabled: Bool        // default: false (in WatchdogService); migrated from legacy watchdogEnabled
+watchdogCommandWatchdogEnabled: Bool // default: false (in WatchdogService); migrated from legacy watchdogEnabled
 watchdogAllowedDirectories: [String] // default: ["~/Development"] (in WatchdogService)
 watchdogBlockedCommands: [String]    // default: ["passwd","sudo","su","shutdown","reboot","halt","poweroff","mkfs","newfs","diskutil","csrutil","nvram","dscl"] (in WatchdogService)
 ```
@@ -124,7 +125,7 @@ watchdogBlockedCommands: [String]    // default: ["passwd","sudo","su","shutdown
 
 #### 7. File Write Watchdog (WatchdogService)
 - Manages a Claude Code PreToolUse hook that blocks Write/Edit/Bash operations outside user-whitelisted directories
-- **Settings**: `isEnabled` (default: false), `allowedDirectories` (default: `["~/Development"]`), `blockedCommands` (default: passwd, sudo, su, shutdown, reboot, halt, poweroff, mkfs, newfs, diskutil, csrutil, nvram, dscl) — persisted via UserDefaults
+- **Settings**: `fileOpsEnabled` (default: false) controls Write/Edit + destructive Bash path checking; `commandWatchdogEnabled` (default: false) controls blocked command detection. Both migrate from legacy `watchdogEnabled` key on first launch. `allowedDirectories` (default: `["~/Development"]`), `blockedCommands` (default: passwd, sudo, su, shutdown, reboot, halt, poweroff, mkfs, newfs, diskutil, csrutil, nvram, dscl) — persisted via UserDefaults. The hook script's tool matcher adapts based on enabled features: `Write|Edit|Bash` when file ops is on, `Bash` only when just command watchdog is on.
 - **Hook script**: Generated bash script at `~/Library/Application Support/com.esison.claude-tmp-monitor/watchdog-hook.sh`
   - Reads tool call JSON from stdin, parses via `osascript -l JavaScript` using `run(argv)` pattern (zero external dependencies)
   - For Write/Edit: extracts `file_path`, resolves to absolute, checks against allowlist
@@ -134,7 +135,7 @@ watchdogBlockedCommands: [String]    // default: ["passwd","sudo","su","shutdown
   - **Fail-open**: if JXA parsing fails, exits 0 (safety net, not sandbox)
 - **Claude settings integration**: patches `~/.claude/settings.local.json` to add/remove PreToolUse hook entry (identified by `watchdog-hook.sh` in command path). Creates file/directory if absent. Atomic writes.
 - **Hook status**: `checkHookStatus()` verifies hook is present in `settings.local.json` (detects external removal)
-- **UI**: Watchdog section in SettingsView with toggle, directory allowlist with add (`NSOpenPanel`) / remove controls, blocked commands list with inline text field add / remove controls, green/red hook status indicator
+- **UI**: SettingsView uses a TabView with 3 tabs — General (monitoring settings), File Operations (file ops toggle, directory allowlist with add (`NSOpenPanel`) / remove controls, green/red hook status indicator), and Blocked Commands (command watchdog toggle, blocked commands list with inline text field add / remove controls)
 - **Known limitation**: Bash parsing is best-effort — won't catch commands using variables (`rm $FILE`), subshells, or piped commands where the final target isn't visible
 
 ### Data Flow
@@ -185,7 +186,7 @@ No external services or third-party SDKs. All operations are local filesystem an
 5. **No delta updates** — Auto-update downloads the full zip archive every time. No binary diff/patch mechanism.
 6. **No checksum verification on updates** — Downloaded zip is not verified against a SHA256 hash. Relies on HTTPS transport security.
 7. **Watchdog Bash parsing is best-effort** — The file write watchdog catches obvious destructive patterns (`rm /path`, `mv`, `>`) but won't catch commands using variables (`rm $FILE`), subshells, or piped commands where the final target isn't visible. Designed as a safety net, not a sandbox.
-8. **Watchdog hook persists independently** — If the app is uninstalled without disabling the watchdog, the hook entry remains in `~/.claude/settings.local.json` and will cause errors on every Claude tool call (script not found).
+8. **Watchdog hook persists independently** — If the app is uninstalled without disabling the watchdog, the hook entry remains in `~/.claude/settings.local.json` and will cause errors on every Claude tool call (script not found). Both `fileOpsEnabled` and `commandWatchdogEnabled` persist independently in UserDefaults; the hook is installed whenever either is enabled.
 9. **Watchdog JXA latency** — `osascript -l JavaScript` invocation adds ~50-100ms to each tool call. Acceptable for a pre-execution hook but noticeable with rapid tool calls.
 
 ---
@@ -354,7 +355,7 @@ Version string appears in 2 files:
 | `Sources/ClaudeTmpMonitor/UpdateService.swift` | Auto-update: GitHub releases API check, download, self-replacement |
 | `Sources/ClaudeTmpMonitor/ContentView.swift` | Main popover view (header, status, projects, update banner, footer with Stats button) |
 | `Sources/ClaudeTmpMonitor/StatsView.swift` | Statistics window: SwiftUI Charts area+line chart, time range picker, summary stats |
-| `Sources/ClaudeTmpMonitor/SettingsView.swift` | Settings dialog view (includes history retention, watchdog section) |
+| `Sources/ClaudeTmpMonitor/SettingsView.swift` | Settings dialog view with 3-tab TabView (General, File Operations, Blocked Commands) |
 | `Sources/ClaudeTmpMonitor/WatchdogService.swift` | File write watchdog: PreToolUse hook management, script generation, Claude settings patching |
 | `Sources/ClaudeTmpMonitor/AboutView.swift` | About dialog view |
 | `Sources/ClaudeTmpMonitor/Resources/` | `MenuBarIcon.png`, `MenuBarIcon@2x.png`, `AppIcon.icns` |
