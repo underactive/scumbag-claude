@@ -5,6 +5,54 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.4] - 2026-03-19
+
+### Added
+
+- Search/filter field between status bar and project list: filters projects by display name (case-insensitive)
+- Sort menu (Size/Name/Date) with checkmark on active selection; sort applies to both projects and files within expanded projects
+- Compact relative timestamps ("2m", "3h", "2d", "Mar 15") on file rows next to size, and on project subtitles
+- File selection circles on every file row for multi-file batch selection
+- "Delete (N)" footer button for batch-deleting selected files with confirm/cancel flow
+- `deleteFiles(_:)` method in MonitorService with symlink target deduplication
+- `relativeTime(_:)` formatting function with static DateFormatter and future-date guard
+- "No matching projects" empty state when search filter yields no results
+- `selectedFileCount` computed property that intersects selection with current file IDs (accurate count after scans)
+- Search query resets on popover open; sort order persists within session
+- Delete confirmations clear when search query changes
+
+## [0.4.3] - 2026-03-19
+
+### Added
+
+- Stacked bar charts color-coded by project for 24h/7d/30d time ranges in Statistics window
+- Hover tooltips showing date header, total size, and per-project rows (color dot, name, size, percentage)
+- 30-day time range added to Statistics
+- Flow layout color legend below chart mapping colors to project names
+- Retention hint when 30d range selected but history retention is below 30 days
+- 12-color palette with deterministic project-to-color mapping
+
+### Changed
+
+- Statistics window enlarged to 700×550
+- 1h range retains area+line chart; longer ranges use stacked bars
+
+## [0.4.2] - 2026-03-19
+
+### Added
+
+- Tabbed Settings window: 3-tab TabView (General, File Operations, Blocked Commands)
+- Independent watchdog toggles: `fileOpsEnabled` for directory-based checks, `commandWatchdogEnabled` for blocked commands
+- Migration from legacy `watchdogEnabled` key to split toggles
+- Explanatory help text and shared hook status indicator on each watchdog tab
+
+### Changed
+
+- Hook script conditionally generated based on enabled features; matcher adapts (`Write|Edit|Bash` vs `Bash`)
+- `shellEscape()` strips control characters
+- `regenerateHookScript()` recovers from externally-deleted script
+- `ForEach` uses stable element identity
+
 ## [0.4.1] - 2026-03-19
 
 ### Added

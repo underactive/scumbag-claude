@@ -21,9 +21,11 @@ Claude Code writes task output to `/private/tmp/claude-*/` directories. These `.
 - **Growth rate tracking** -- shows per-file and per-project growth rates (e.g. "↑ 2.3 MB/min") for actively growing files
 - **Symlink awareness** -- resolves symlinks to get actual sizes; "link only" badge for out-of-scope targets, "×N" badge for deduplicated files, broken symlink detection
 - **System notifications** -- alerts when files cross warning or critical size thresholds (fires once per file per threshold, not repeatedly)
-- **One-click cleanup** -- delete individual files, entire projects, clean all, or clean broken symlinks with inline confirmation
+- **Search & sort** -- filter projects by name and sort by size, name, or modification date
+- **One-click cleanup** -- delete individual files, entire projects, batch-delete selected files, clean all, or clean broken symlinks with inline confirmation
 - **Stale directory detection** -- flags project directories that haven't been modified in a configurable number of days
-- **Statistics & history** -- track total size over time with an area/line chart (1h/24h/7d ranges), current/peak/average summary stats, and configurable retention (1–30 days)
+- **File timestamps** -- compact relative modification times ("2m", "3h", "2d") on file rows and project subtitles
+- **Statistics & history** -- track total size over time with area/line and stacked bar charts (1h/24h/7d/30d ranges), per-project color-coded breakdown with hover tooltips, current/peak/average summary stats, and configurable retention (1–30 days)
 - **File write watchdog** -- Claude Code PreToolUse hook that blocks Write/Edit/Bash operations targeting files outside user-whitelisted directories, plus a configurable blocked commands list (e.g., `sudo`, `passwd`, `shutdown`) that rejects inherently dangerous commands regardless of directory, with macOS notifications for blocked attempts
 - **Configurable thresholds** -- set your own warning/critical size limits, scan interval, and stale directory age
 - **Settings & About dialogs** -- dedicated settings window and right-click context menu with About dialog
