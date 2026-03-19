@@ -36,7 +36,7 @@
 
 ## Active Intelligence
 
-- [ ] **Active session detection** — Check if Claude Code is actively writing to a project (look for running `claude` processes or recent file modification within the last few seconds). Show a pulsing "live" badge on those projects. Prevents the #1 user mistake: accidentally deleting files an active Claude session still needs.
+- [x] **Active session detection** — Check if Claude Code is actively writing to a project (look for running `claude` processes or recent file modification within the last few seconds). Show a pulsing "live" badge on those projects. Prevents the #1 user mistake: accidentally deleting files an active Claude session still needs.
 - [x] **Menubar trend indicator** — A tiny `↑` / `↓` / `→` arrow next to the size in the menubar showing whether total usage is growing, stable, or shrinking. The infrastructure already exists — `MonitorService` tracks `previousSizes` and computes growth rates per file. Rolling this up to a global trend is a few lines of code.
 - [ ] **Intelligent cleanup suggestions** — Use heuristics to recommend what's safe to delete: files from sessions that ended >N hours ago (no growth rate), duplicate symlinks (where `duplicateCount > 1` — removing redundant links is free), and stale projects. Show a "Suggested cleanup: save ~X MB" banner.
 

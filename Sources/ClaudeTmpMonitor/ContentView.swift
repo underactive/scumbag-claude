@@ -117,6 +117,22 @@ private struct PieSlice: Shape {
     }
 }
 
+// MARK: - Pulsing Dot
+
+private struct PulsingDot: View {
+    @State private var isPulsing = false
+
+    var body: some View {
+        Circle()
+            .fill(Color.green)
+            .frame(width: 6, height: 6)
+            .opacity(isPulsing ? 1.0 : 0.4)
+            .animation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true), value: isPulsing)
+            .onAppear { isPulsing = true }
+            .onDisappear { isPulsing = false }
+    }
+}
+
 // MARK: - Main Content View
 
 struct ContentView: View {
@@ -343,7 +359,7 @@ struct ContentView: View {
                     Text(project.displayName)
                         .font(.subheadline.weight(.medium))
                         .lineLimit(1)
-                    if project.isStale {
+                    if project.isStale && !project.isActive {
                         Text("stale")
                             .font(.caption2)
                             .foregroundColor(.orange)
@@ -351,6 +367,19 @@ struct ContentView: View {
                             .padding(.vertical, 1)
                             .background(Color.orange.opacity(0.15))
                             .cornerRadius(3)
+                    }
+                    if project.isActive {
+                        HStack(spacing: 3) {
+                            PulsingDot()
+                            Text("live")
+                                .font(.caption2)
+                                .foregroundColor(.green)
+                        }
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 1)
+                        .background(Color.green.opacity(0.15))
+                        .cornerRadius(3)
+                        .help("Claude Code is actively writing to this project")
                     }
                 }
                 HStack(spacing: 0) {
@@ -364,6 +393,11 @@ struct ContentView: View {
                     if project.lastModified != .distantPast {
                         Text(" · \(relativeTime(project.lastModified))")
                     }
+                    if let rateText = formatGrowthRate(project.growthRate) {
+                        Text(" · ")
+                        Text("↑ \(rateText)")
+                            .foregroundColor(.orange)
+                    }
                 }
                 .font(.caption)
                 .foregroundColor(.secondary)
@@ -375,12 +409,6 @@ struct ContentView: View {
             Text(formatBytes(project.totalSize))
                 .font(.subheadline.monospacedDigit())
                 .foregroundColor(sizeColor(project.totalSize))
-
-            if let rateText = formatGrowthRate(project.growthRate) {
-                Text("↑ \(rateText)")
-                    .font(.caption.monospacedDigit())
-                    .foregroundColor(.orange)
-            }
 
             if confirmDelete == .project(project.id) {
                 Button("Cancel") { confirmDelete = nil }

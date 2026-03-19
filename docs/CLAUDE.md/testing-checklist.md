@@ -299,6 +299,21 @@
 - [ ] Selected file count in footer reflects actual selection regardless of search filter
 - [ ] Batch delete handles symlink targets correctly (same scope rules as single delete)
 
+## Active Session Detection
+- [ ] Projects with files modified within the last 60 seconds show a green pulsing "live" badge
+- [ ] Projects with actively growing files (positive growth rate) show the "live" badge even if lastModified is slightly older than 60s
+- [ ] The "live" badge disappears after 60 seconds of no file activity (next scan after inactivity)
+- [ ] The green dot in the "live" badge pulses smoothly (opacity 0.4→1.0, ~1s cycle)
+- [ ] Hovering the "live" badge shows tooltip "Claude Code is actively writing to this project"
+- [ ] "stale" and "live" badges never appear simultaneously on the same project
+- [ ] Multiple projects can show the "live" badge simultaneously
+- [ ] The "live" badge does not persist across popover close/reopen (animation restarts fresh)
+- [ ] A project with lastModified >7 days old but with actively growing files shows "live" not "stale" (isActive takes precedence)
+- [ ] A project shows the "live" badge when its files have positive growth rate even if the file's last-modified timestamp is older than 60 seconds
+- [ ] A project's "live" badge disappears after file growth stops AND 60 seconds have elapsed (verified after next scan completes)
+- [ ] A project with duplicated symlink targets (xN badge visible) still shows the "live" badge when its files are actively being written to
+- [ ] Opening the popover for a project already active from a previous scan shows the "live" badge immediately
+
 ## Notifications
 - [ ] Warning notification fires when a file crosses the warning threshold
 - [ ] Critical notification fires when a file crosses the critical threshold
