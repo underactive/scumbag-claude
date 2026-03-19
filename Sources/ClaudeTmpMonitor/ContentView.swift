@@ -9,6 +9,12 @@ enum DeleteConfirmation: Equatable {
     case brokenSymlinks
 }
 
+private enum ProjectSortOrder: String, CaseIterable {
+    case size = "Size"
+    case name = "Name"
+    case date = "Date"
+}
+
 // MARK: - Hover Button Style
 
 /// A plain button style that shows a subtle rounded background on hover.
@@ -119,6 +125,8 @@ struct ContentView: View {
     @State private var expandedProjects: Set<String> = []
     @State private var confirmDelete: DeleteConfirmation? = nil
     @State private var projectsContentHeight: CGFloat = 0
+    @State private var searchQuery: String = ""
+    @State private var sortOrder: ProjectSortOrder = .size
     var onOpenSettings: () -> Void = {}
     var onOpenStats: () -> Void = {}
 
@@ -132,7 +140,12 @@ struct ContentView: View {
             if monitor.projects.isEmpty {
                 emptySection
             } else {
-                projectsSection
+                searchSortBar
+                if displayedProjects.isEmpty {
+                    noMatchesSection
+                } else {
+                    projectsSection
+                }
             }
 
             if updateService.shouldShowBanner || updateService.status.isActiveUpdate {
@@ -144,7 +157,11 @@ struct ContentView: View {
             footerSection
         }
         .frame(width: 380)
-        .onAppear { confirmDelete = nil }
+        .onAppear {
+            confirmDelete = nil
+            searchQuery = ""
+        }
+        .onChange(of: searchQuery) { _ in confirmDelete = nil }
     }
 
     // MARK: - Header
@@ -224,6 +241,63 @@ struct ContentView: View {
         .padding(.vertical, 20)
     }
 
+    // MARK: - Search & Sort
+
+    private var searchSortBar: some View {
+        HStack(spacing: 6) {
+            HStack(spacing: 4) {
+                Image(systemName: "magnifyingglass")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                TextField("Filter projects...", text: $searchQuery)
+                    .textFieldStyle(.plain)
+                    .font(.subheadline)
+                if !searchQuery.isEmpty {
+                    Button(action: { searchQuery = "" }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Clear search")
+                }
+            }
+            .padding(.horizontal, 6)
+            .padding(.vertical, 4)
+            .background(Color.primary.opacity(0.06))
+            .cornerRadius(6)
+
+            Menu {
+                ForEach(ProjectSortOrder.allCases, id: \.self) { order in
+                    Button(action: { sortOrder = order }) {
+                        if sortOrder == order {
+                            Label(order.rawValue, systemImage: "checkmark")
+                        } else {
+                            Text(order.rawValue)
+                        }
+                    }
+                }
+            } label: {
+                Image(systemName: "arrow.up.arrow.down")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            .menuStyle(.borderlessButton)
+            .fixedSize()
+            .accessibilityLabel("Sort order")
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 6)
+    }
+
+    private var noMatchesSection: some View {
+        Text("No matching projects")
+            .font(.subheadline)
+            .foregroundColor(.secondary)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 20)
+    }
+
     // MARK: - Projects List
 
     private static let maxProjectsHeight: CGFloat = 300
@@ -231,7 +305,7 @@ struct ContentView: View {
     private var projectsSection: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                ForEach(monitor.projects) { project in
+                ForEach(displayedProjects) { project in
                     VStack(alignment: .leading, spacing: 0) {
                         projectRow(project)
                         if expandedProjects.contains(project.id) {
@@ -333,7 +407,7 @@ struct ContentView: View {
 
     private func filesSection(for project: ClaudeProject) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            ForEach(project.files) { file in
+            ForEach(sortedFiles(project.files)) { file in
                 fileRow(file)
             }
         }
@@ -624,6 +698,35 @@ struct ContentView: View {
 
     private var brokenSymlinkCount: Int {
         monitor.projects.reduce(0) { $0 + $1.brokenSymlinkCount }
+    }
+
+    private var displayedProjects: [ClaudeProject] {
+        let filtered = searchQuery.isEmpty
+            ? monitor.projects
+            : monitor.projects.filter { $0.displayName.localizedCaseInsensitiveContains(searchQuery) }
+        switch sortOrder {
+        case .size: return filtered.sorted { $0.totalSize > $1.totalSize }
+        case .name: return filtered.sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
+        case .date: return filtered.sorted {
+            if $0.lastModified == $1.lastModified {
+                return $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending
+            }
+            return $0.lastModified > $1.lastModified
+        }
+        }
+    }
+
+    private func sortedFiles(_ files: [MonitoredFile]) -> [MonitoredFile] {
+        switch sortOrder {
+        case .size: return files.sorted { $0.size > $1.size }
+        case .name: return files.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        case .date: return files.sorted {
+            if $0.lastModified == $1.lastModified {
+                return $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
+            }
+            return $0.lastModified > $1.lastModified
+        }
+        }
     }
 
     private func sizeColor(_ bytes: UInt64) -> Color {

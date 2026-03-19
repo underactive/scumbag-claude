@@ -20,8 +20,8 @@
 ## UX / Quality of Life
 
 - [ ] **Configurable project name extraction** — Replace the hardcoded `skipWords` set in `extractProjectName()` with something that works for any user (e.g., infer from path depth, or let users set a project root).
-- [ ] **Search / filter projects** — Add a filter field for finding specific projects when the list is long.
-- [ ] **Sort options** — Files are always sorted by size descending. Add sort by name or modification date.
+- [x] **Search / filter projects** — Add a filter field for finding specific projects when the list is long.
+- [x] **Sort options** — Files are always sorted by size descending. Add sort by name or modification date.
 - [ ] **Show file modification timestamps** — The data is already collected (`lastModified` on `MonitoredFile`) but never displayed in the UI.
 - [ ] **File preview or open** — View file contents or open them in an editor from the app.
 - [ ] **Batch operations on files** — Allow deleting individual files in bulk, not just entire projects.

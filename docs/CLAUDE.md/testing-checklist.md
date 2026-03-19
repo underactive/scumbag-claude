@@ -251,6 +251,24 @@
 - [ ] Blocked commands list and add field are hidden when the Blocked Commands tab toggle is off
 - [ ] Pressing Enter in blocked command text field adds the command
 
+## Project Search & Sort
+- [ ] Search field appears between status bar and project list when projects exist
+- [ ] Search field is hidden when no projects exist
+- [ ] Typing in search field filters projects by display name (case-insensitive)
+- [ ] Clearing search field (via X button) restores all projects
+- [ ] "No matching projects" message shown when search has no results (distinct from "No Claude tmp directories found")
+- [ ] Sort menu shows Size, Name, Date options with checkmark on active selection
+- [ ] Sort by Size orders projects largest-first (default behavior)
+- [ ] Sort by Name orders projects alphabetically (case-insensitive)
+- [ ] Sort by Date orders projects most-recently-modified first
+- [ ] Switching sort order reorders files within expanded projects
+- [ ] Clean All still operates on all projects regardless of active search filter
+- [ ] Clean Broken still counts across all projects regardless of active search filter
+- [ ] Popover height adjusts correctly with search bar present
+- [ ] Search query resets when popover is closed and reopened
+- [ ] Sort order persists within a session (across popover open/close) but resets on app restart
+- [ ] Delete confirmation on a project is cleared when typing in the search field
+
 ## Notifications
 - [ ] Warning notification fires when a file crosses the warning threshold
 - [ ] Critical notification fires when a file crosses the critical threshold
