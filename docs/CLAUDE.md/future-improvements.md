@@ -33,3 +33,32 @@
 - [ ] **Actionable notifications** — Click notification to open popover, or add a "Delete" action directly from the system notification.
 - [ ] **Updater improvements** — Add checksum (SHA256) verification for downloaded updates, delta updates instead of full zip, or adopt Sparkle framework for more robust updating.
 - [ ] **Test target** — Add unit tests for `MonitorService.scan()` logic, `extractProjectName()`, and threshold calculations to catch regressions.
+
+## Active Intelligence
+
+- [ ] **Active session detection** — Check if Claude Code is actively writing to a project (look for running `claude` processes or recent file modification within the last few seconds). Show a pulsing "live" badge on those projects. Prevents the #1 user mistake: accidentally deleting files an active Claude session still needs.
+- [x] **Menubar trend indicator** — A tiny `↑` / `↓` / `→` arrow next to the size in the menubar showing whether total usage is growing, stable, or shrinking. The infrastructure already exists — `MonitorService` tracks `previousSizes` and computes growth rates per file. Rolling this up to a global trend is a few lines of code.
+- [ ] **Intelligent cleanup suggestions** — Use heuristics to recommend what's safe to delete: files from sessions that ended >N hours ago (no growth rate), duplicate symlinks (where `duplicateCount > 1` — removing redundant links is free), and stale projects. Show a "Suggested cleanup: save ~X MB" banner.
+
+## Operational Visibility
+
+- [ ] **Watchdog audit log viewer** — The watchdog writes to `watchdog.log` but there's no UI for it. A simple scrollable log view (in Settings or its own window) showing blocked operations with timestamps, tool name, and the path that triggered the block.
+- [ ] **Disk space context** — Show total tmp usage relative to available disk space: `"450 MB (0.2% of 200 GB free)"`. Could also trigger an additional "low disk" alert tier when Claude tmp files push free space below a threshold.
+- [ ] **Space reclaimed tracker** — Track cumulative bytes deleted through the app over time. A "You've reclaimed 12.3 GB this month" stat in StatsView. The delete methods already know the sizes — just accumulate to a counter in `HistoryService`.
+- [ ] **Snapshot diff ("What Changed")** — When opening the popover, briefly highlight what changed since last time: new projects (green), removed projects, significant size jumps (orange pulse). Answers "what happened while I wasn't looking?" at a glance.
+
+## Watchdog Enhancements
+
+- [ ] **Watchdog PostToolUse hook** — A companion hook that runs after tool execution to log what was actually written/modified — building an audit trail of what Claude did do, not just what it was blocked from doing. Claude Code supports `PostToolUse` hooks with the same schema.
+- [ ] **Per-project watchdog scopes** — Instead of a single global allowlist, allow per-project directory restrictions. A web project might only need access to its own directory, while a monorepo project needs broader access. The `ClaudeProject` model already has the `path` and `claudeDir` to identify projects.
+
+## System Integration
+
+- [ ] **Disk pressure handler** — Register for macOS `NSWorkspace` disk space pressure notifications and auto-surface a cleanup prompt when the system is running low. Makes the app reactive to real OS-level pressure rather than just monitoring its own thresholds.
+- [ ] **CLI companion** — A lightweight `scumbag-cli` binary (or XPC service) that can query app state, trigger scans, or run cleanup from the terminal. Useful for scripting (`scumbag-cli clean --stale`) or when users are already in a terminal session.
+- [ ] **Option-click quick clean** — Hold Option while clicking the menubar icon to immediately clean all broken symlinks + stale projects without opening the popover. Power-user shortcut via `NSEvent.modifierFlags` check in the status item action handler.
+
+## Notification Improvements
+
+- [ ] **Notification digest mode** — Instead of one notification per file per threshold crossing, accumulate and send periodic summaries: `"3 projects grew past warning in the last hour, total +1.2 GB"`. Reduces notification fatigue for power users running many concurrent Claude sessions.
+- [ ] **Per-project thresholds** — Allow different warning/critical thresholds per project. A data-heavy ML project routinely producing 500 MB files is different from a small web project doing the same. Per-project threshold overrides stored in UserDefaults keyed by project path.
