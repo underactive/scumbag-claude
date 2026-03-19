@@ -4,7 +4,7 @@
 
 **Scumbag Claude** (aka Claude Tmp Monitor) is a macOS menubar application that monitors Claude Code's temporary file directories (`/private/tmp/claude-*/`) for large `.output` files and stale task directories, alerting the user and providing quick cleanup actions.
 
-**Current Version:** 0.4.2
+**Current Version:** 0.4.3
 **Status:** In development
 
 ---
@@ -25,7 +25,7 @@ Nine-file SwiftUI app using a custom `NSStatusItem` for menubar integration.
 - `Sources/ClaudeTmpMonitor/HistoryService.swift` - Historical data persistence: records scan snapshots (`HistorySnapshot`, `ProjectSnapshot` Codable models), two-tier aggregation (raw ≤1h, 5-minute buckets beyond), JSON storage in `~/Library/Application Support/com.esison.claude-tmp-monitor/history.json`, configurable retention (1–30 days), 60s save timer, querying by `TimeRange`.
 - `Sources/ClaudeTmpMonitor/UpdateService.swift` - Auto-update logic: GitHub releases API checking, download with progress, self-replacement via shell script, version comparison. Persists settings via UserDefaults.
 - `Sources/ClaudeTmpMonitor/ContentView.swift` - Main popover view: header, status bar, expandable projects list with symlink scope/deduplication badges and broken symlink counts, update banner, footer with Settings button, Stats button, Clean Broken, Clean All, and Quit. Receives `onOpenSettings` and `onOpenStats` closures from `AppDelegate`. Defines `HoverButtonStyle` (custom `ButtonStyle` with configurable hover color) used by icon-only buttons.
-- `Sources/ClaudeTmpMonitor/StatsView.swift` - Statistics window: SwiftUI Charts area+line chart of total size over time, segmented time range picker (1h/24h/7d), current/peak/average summary stats, empty state. Hosted in a separate resizable `NSWindow`.
+- `Sources/ClaudeTmpMonitor/StatsView.swift` - Statistics window: dual chart rendering — area+line chart for 1h range, stacked bar charts color-coded by project for 24h/7d/30d ranges. Hover tooltips show per-project breakdown (size, percentage). Flow layout color legend below chart. 12-color palette with deterministic project mapping. Retention hint for 30d range. Segmented time range picker (1h/24h/7d/30d), current/peak/average summary stats, empty state. Hosted in a separate resizable `NSWindow` (700×550).
 - `Sources/ClaudeTmpMonitor/SettingsView.swift` - Settings dialog with TabView containing 3 tabs: General (threshold/interval rows, history retention, notifications toggle, launch at login toggle), File Operations (file write watchdog toggle, directory allowlist, hook status), and Blocked Commands (command watchdog toggle, blocked commands list). Hosted in a separate `NSWindow`.
 - `Sources/ClaudeTmpMonitor/AboutView.swift` - About dialog: app icon, name, version, update status, GitHub link. Hosted in a separate `NSWindow`.
 - `Sources/ClaudeTmpMonitor/WatchdogService.swift` - File write watchdog: manages Claude Code PreToolUse hook that blocks Write/Edit/Bash operations outside whitelisted directories. Two independent feature toggles: `fileOpsEnabled` (Write/Edit + destructive Bash) and `commandWatchdogEnabled` (blocked commands). `hookShouldBeInstalled` computed property returns true when either is enabled; `reconcileHookState()` installs/removes the hook accordingly. Generates bash hook script with JXA JSON parsing, patches `~/.claude/settings.local.json`, provides directory allowlist management. Migrates legacy `watchdogEnabled` key on init. Settings persisted via UserDefaults.
@@ -38,7 +38,7 @@ Nine-file SwiftUI app using a custom `NSStatusItem` for menubar integration.
 - Combine (`combineLatest`, `sink` for reactive menubar icon updates)
 - ServiceManagement (`SMAppService` for launch-at-login)
 - CoreServices (`FSEventStream` for filesystem change notifications)
-- Charts (SwiftUI Charts framework for `AreaMark`, `LineMark`, `AxisMarks` in statistics view)
+- Charts (SwiftUI Charts framework for `AreaMark`, `LineMark`, `BarMark`, `AxisMarks` in statistics view)
 - URLSession (async `data(from:)` and `download(from:)` for GitHub API and update downloads)
 
 ### Key Subsystems
@@ -67,8 +67,8 @@ Nine-file SwiftUI app using a custom `NSStatusItem` for menubar integration.
 - **Two-tier aggregation**: raw scan-resolution snapshots kept for ≤1 hour; older data downsampled to 5-minute buckets (averaging totalSize, totalFileCount, per-project values). Steady-state: ~2,256 records, <500 KB.
 - **Persistence**: JSON-encoded to `~/Library/Application Support/com.esison.claude-tmp-monitor/history.json`. Save runs every 60s + on `applicationWillTerminate`. Load on init.
 - **Retention**: configurable 1–30 days (default 7) via `historyRetentionDays`. Pruning runs at each save.
-- **Querying**: `snapshots(for:)` filters by `TimeRange` (.oneHour, .twentyFourHours, .sevenDays); `peakSize(in:)` and `averageSize(in:)` compute stats.
-- **StatsView**: Separate 600×450 resizable `NSWindow` with SwiftUI Charts `AreaMark`+`LineMark`, segmented time range picker, current/peak/average summary row, and empty state for <2 data points.
+- **Querying**: `snapshots(for:)` filters by `TimeRange` (.oneHour, .twentyFourHours, .sevenDays, .thirtyDays); `peakSize(in:)` and `averageSize(in:)` compute stats.
+- **StatsView**: Separate 700×550 resizable `NSWindow` with dual chart rendering. **1h range**: area+line chart of total size. **24h/7d/30d ranges**: stacked `BarMark` charts with per-project color coding (12-color palette, deterministic mapping by sorted project name). Calendar-aligned bucketing (hourly for 24h, daily for 7d/30d) via `aggregateBars(from:range:)`. Hover tooltips via `.chartOverlay` + `.onContinuousHover` show date header, total size, and per-project rows sorted by size descending with color dot, name, size in MB, and percentage. `FlowLayout` legend below chart. Retention hint when 30d range selected but `historyRetentionDays < 30`.
 
 #### 3. Status & Notifications
 - Three states: Normal (green), Warning (orange), Critical (red)

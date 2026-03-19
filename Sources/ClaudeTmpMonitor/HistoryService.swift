@@ -22,12 +22,14 @@ enum TimeRange: String, CaseIterable {
     case oneHour = "1h"
     case twentyFourHours = "24h"
     case sevenDays = "7d"
+    case thirtyDays = "30d"
 
     var seconds: TimeInterval {
         switch self {
         case .oneHour: return 3600
         case .twentyFourHours: return 86400
-        case .sevenDays: return 604800
+        case .sevenDays: return 604_800
+        case .thirtyDays: return 2_592_000
         }
     }
 }
