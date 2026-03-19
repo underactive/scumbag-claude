@@ -204,6 +204,29 @@
 - [ ] Hook blocks Write with path traversal (`../`) targeting outside allowed directories
 - [ ] Directory with name prefix matching allowed dir (e.g. `/DevelopmentEvil`) is blocked
 
+## Blocked Commands (Watchdog)
+- [ ] Default blocked commands list contains: passwd, sudo, su, shutdown, reboot, halt, poweroff, mkfs, newfs, diskutil, csrutil, nvram, dscl
+- [ ] Hook blocks `passwd root` (command at start of line) with exit code 2
+- [ ] Hook blocks `echo foo | sudo tee /etc/thing` (sudo after pipe) with exit code 2
+- [ ] Hook blocks `cmd1 && sudo cmd2` (sudo after &&) with exit code 2
+- [ ] Hook allows `cat /etc/passwd` (passwd in a path argument, not as a command) with exit code 0
+- [ ] Blocked command triggers macOS notification with "Command blocked: <cmd>" message
+- [ ] Blocked command is logged to watchdog.log with BLOCKED_CMD prefix
+- [ ] Adding a command via Settings text field appends it to the list and regenerates hook script
+- [ ] Removing a command via minus button removes it from the list and regenerates hook script
+- [ ] Duplicate commands are not added (addBlockedCommand deduplicates)
+- [ ] Empty/whitespace-only command names cannot be added (Add button is disabled)
+- [ ] Blocked commands list persists after app relaunch
+- [ ] Settings window height accommodates both directory list and blocked commands list
+- [ ] Hook blocks `cmd1; sudo cmd2` (sudo after semicolon) with exit code 2
+- [ ] Hook blocks `  sudo rm -rf /` (command with leading whitespace) with exit code 2
+- [ ] Hook blocks `sudo` at end of line with no arguments (e.g., `echo | sudo`) with exit code 2
+- [ ] Hook allows `echo shutdown` (blocked command as argument, not at command position) with exit code 0
+- [ ] Removing all blocked commands results in an empty list and no commands are blocked
+- [ ] Modifying blocked commands while watchdog is disabled takes effect when subsequently enabled
+- [ ] Blocked commands UI section is hidden when watchdog toggle is off
+- [ ] Pressing Enter in blocked command text field adds the command
+
 ## Notifications
 - [ ] Warning notification fires when a file crosses the warning threshold
 - [ ] Critical notification fires when a file crosses the critical threshold

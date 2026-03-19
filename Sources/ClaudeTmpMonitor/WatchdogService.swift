@@ -26,6 +26,22 @@ class WatchdogService: ObservableObject {
         }
     }
 
+    @Published var blockedCommands: [String] {
+        didSet {
+            defaults.set(blockedCommands, forKey: SettingsKey.watchdogBlockedCommands)
+            if isEnabled {
+                regenerateHookScript()
+            }
+        }
+    }
+
+    /// System-admin and disk-management commands that should never be run by an AI agent.
+    /// Criteria: commands that escalate privileges, alter system boot/security state, or destroy disks.
+    static let defaultBlockedCommands: [String] = [
+        "passwd", "sudo", "su", "shutdown", "reboot", "halt", "poweroff",
+        "mkfs", "newfs", "diskutil", "csrutil", "nvram", "dscl",
+    ]
+
     // MARK: - Published State
 
     @Published private(set) var hookInstalled: Bool = false
@@ -56,8 +72,15 @@ class WatchdogService: ObservableObject {
         let enabled = defaults.object(forKey: SettingsKey.watchdogEnabled) as? Bool ?? false
         let dirs = defaults.object(forKey: SettingsKey.watchdogAllowedDirectories) as? [String]
             ?? ["~/Development"]
+        let allowedChars = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_"))
+        let rawCmds = defaults.object(forKey: SettingsKey.watchdogBlockedCommands) as? [String]
+            ?? Self.defaultBlockedCommands
+        let cmds = rawCmds.filter { cmd in
+            !cmd.isEmpty && cmd.unicodeScalars.allSatisfy { allowedChars.contains($0) }
+        }
         self._isEnabled = Published(wrappedValue: enabled)
         self._allowedDirectories = Published(wrappedValue: dirs)
+        self._blockedCommands = Published(wrappedValue: cmds)
 
         checkHookStatus()
 
@@ -82,6 +105,24 @@ class WatchdogService: ObservableObject {
     func removeDirectory(at index: Int) {
         guard index >= 0 && index < allowedDirectories.count else { return }
         allowedDirectories.remove(at: index)
+    }
+
+    // MARK: - Blocked Command Management
+
+    func addBlockedCommand(_ command: String) {
+        let trimmed = command.trimmingCharacters(in: .whitespaces)
+        // Only allow alphanumeric, hyphens, underscores — prevents regex injection in grep -E
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_"))
+        guard !trimmed.isEmpty,
+              trimmed.unicodeScalars.allSatisfy({ allowed.contains($0) }),
+              !blockedCommands.contains(trimmed)
+        else { return }
+        blockedCommands.append(trimmed)
+    }
+
+    func removeBlockedCommand(at index: Int) {
+        guard index >= 0 && index < blockedCommands.count else { return }
+        blockedCommands.remove(at: index)
     }
 
     // MARK: - Hook Installation
@@ -194,6 +235,7 @@ class WatchdogService: ObservableObject {
         }
 
         let dirsArray = expandedDirs.map { "\"\(shellEscape($0))\"" }.joined(separator: " ")
+        let cmdsArray = blockedCommands.map { "\"\(shellEscape($0))\"" }.joined(separator: " ")
         let home = NSHomeDirectory()
 
         // JXA script uses single quotes in bash, so we use a heredoc to avoid escaping issues.
@@ -210,6 +252,7 @@ class WatchdogService: ObservableObject {
         # Managed by Scumbag Claude (com.esison.claude-tmp-monitor)
 
         ALLOWED_DIRS=(\(dirsArray))
+        BLOCKED_CMDS=(\(cmdsArray))
         LOG_FILE="\(shellEscape(home))/Library/Application Support/com.esison.claude-tmp-monitor/watchdog.log"
 
         INPUT=$(cat)
@@ -321,11 +364,21 @@ class WatchdogService: ObservableObject {
             exit 0
         fi
 
-        # For Bash tool: check for destructive patterns
+        # For Bash tool: check blocked commands, then destructive patterns
         if [[ "$TOOL_NAME" == "Bash" ]]; then
             if [[ -z "$COMMAND" ]]; then
                 exit 0
             fi
+
+            # Blocked commands — always rejected regardless of directory
+            for cmd in "${BLOCKED_CMDS[@]}"; do
+                if echo "$COMMAND" | grep -qE "(^\\s*|[|;&]\\s*)${cmd}(\\s|$)"; then
+                    notify_blocked "Command blocked: $cmd"
+                    echo "$(date -u +%Y-%m-%dT%H:%M:%SZ) BLOCKED_CMD $cmd in: $COMMAND" >> "$LOG_FILE" 2>/dev/null
+                    echo "BLOCKED by Scumbag Claude Watchdog: '$cmd' is a blocked command" >&2
+                    exit 2
+                fi
+            done
 
             # Destructive patterns to check
             DESTRUCTIVE=false
