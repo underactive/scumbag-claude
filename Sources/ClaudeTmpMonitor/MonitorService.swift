@@ -21,6 +21,8 @@ enum SettingsKey {
     static let watchdogCommandWatchdogEnabled = "watchdogCommandWatchdogEnabled"
     static let watchdogAllowedDirectories = "watchdogAllowedDirectories"
     static let watchdogBlockedCommands = "watchdogBlockedCommands"
+    static let diskPressureEnabled = "diskPressureEnabled"
+    static let diskPressureThresholdGB = "diskPressureThresholdGB"
 }
 
 // MARK: - Models
@@ -95,6 +97,27 @@ class MonitorService: ObservableObject {
     @Published var lastDeleteError: String?
     @Published var notificationsDenied: Bool = false
 
+    // Disk pressure
+    @Published var diskPressureDetected: Bool = false
+    @Published var availableDiskSpaceGB: Double? = nil
+    @Published var diskPressureEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(diskPressureEnabled, forKey: SettingsKey.diskPressureEnabled)
+            if !diskPressureEnabled {
+                diskPressureDetected = false
+                availableDiskSpaceGB = nil
+                diskPressureNotified = false
+            }
+        }
+    }
+    @Published var diskPressureThresholdGB: Int {
+        didSet {
+            let clamped = min(max(diskPressureThresholdGB, 1), 500)
+            if diskPressureThresholdGB != clamped { diskPressureThresholdGB = clamped; return }
+            UserDefaults.standard.set(diskPressureThresholdGB, forKey: SettingsKey.diskPressureThresholdGB)
+        }
+    }
+
     // Settings
     @Published var warningThresholdMB: Int {
         didSet {
@@ -164,6 +187,7 @@ class MonitorService: ObservableObject {
     private var previousSizes: [String: (size: UInt64, time: Date)] = [:]
     private var previousTotalSize: UInt64?
     private var notifiedPaths: Set<String> = []
+    private var diskPressureNotified: Bool = false
     private var isUpdatingLaunchAtLogin = false
 
     init() {
@@ -184,6 +208,10 @@ class MonitorService: ObservableObject {
         self.notificationsEnabled = defaults.object(forKey: SettingsKey.notificationsEnabled) as? Bool ?? true
         self.showSizeInMenuBar = defaults.object(forKey: SettingsKey.showSizeInMenuBar) as? Bool ?? true
         self.launchAtLogin = SMAppService.mainApp.status == .enabled
+
+        self.diskPressureEnabled = defaults.object(forKey: SettingsKey.diskPressureEnabled) as? Bool ?? true
+        let rawDiskThreshold = defaults.object(forKey: SettingsKey.diskPressureThresholdGB) as? Int ?? 10
+        self.diskPressureThresholdGB = min(max(rawDiskThreshold, 1), 500)
 
         requestNotificationPermission()
         checkNotificationAuthorization()
@@ -631,6 +659,7 @@ class MonitorService: ObservableObject {
         notifiedPaths.formIntersection(currentPaths)
 
         updateStatus()
+        checkDiskPressure()
 
         // Notify history service (or any other listener) of scan results
         onScanComplete?(totalSize, totalFileCount, projects)
@@ -716,6 +745,44 @@ class MonitorService: ObservableObject {
         }
 
         return (files, totalSize)
+    }
+
+    private func checkDiskPressure() {
+        guard diskPressureEnabled else {
+            diskPressureDetected = false
+            availableDiskSpaceGB = nil
+            diskPressureNotified = false
+            return
+        }
+
+        let homeURL = FileManager.default.homeDirectoryForCurrentUser
+        guard let values = try? homeURL.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]),
+              let availableBytes = values.volumeAvailableCapacityForImportantUsage else {
+            // Fail-open: can't read disk space, don't raise a false alarm
+            diskPressureDetected = false
+            availableDiskSpaceGB = nil
+            return
+        }
+
+        let availableGB = Double(availableBytes) / (1024 * 1024 * 1024)
+        availableDiskSpaceGB = availableGB
+        let underPressure = availableGB < Double(diskPressureThresholdGB)
+
+        if underPressure && !diskPressureDetected {
+            // Transition INTO pressure
+            diskPressureDetected = true
+            if !diskPressureNotified && notificationsEnabled {
+                diskPressureNotified = true
+                sendNotification(
+                    title: "Low Disk Space",
+                    body: String(format: "%.1f GB free — %@ used by Claude tmp files", availableGB, formatBytes(totalSize))
+                )
+            }
+        } else if !underPressure && diskPressureDetected {
+            // Transition OUT of pressure
+            diskPressureDetected = false
+            diskPressureNotified = false
+        }
     }
 
     private func updateStatus() {

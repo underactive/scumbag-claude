@@ -32,6 +32,16 @@ struct SettingsView: View {
             Divider()
                 .padding(.vertical, 4)
 
+            Toggle("Low disk space warnings", isOn: $monitor.diskPressureEnabled)
+                .font(.subheadline)
+
+            if monitor.diskPressureEnabled {
+                settingRow("Free space threshold", value: $monitor.diskPressureThresholdGB, unit: "GB")
+            }
+
+            Divider()
+                .padding(.vertical, 4)
+
             Toggle("Show size in menu bar", isOn: $monitor.showSizeInMenuBar)
                 .font(.subheadline)
 

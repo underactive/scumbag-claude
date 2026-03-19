@@ -338,3 +338,26 @@
 - [ ] Enable commands only, verify destructive file ops outside allowed dirs (e.g., rm /outside/path) are allowed through (file ops watchdog is off)
 - [ ] Enable file ops → disable file ops → enable commands: verify hook reinstalls with Bash-only matcher
 - [ ] When both toggles are off, hook status indicator is not shown on either watchdog tab
+
+## Disk Pressure Detection
+- [ ] When available disk space is below the threshold, an orange "Low Disk Space" banner appears between projects and update banner
+- [ ] Banner shows free space in GB and Claude tmp usage (e.g., "5.2 GB free — 150 MB used by Claude tmp")
+- [ ] Banner disappears automatically when disk space recovers above the threshold
+- [ ] First scan below threshold fires a system notification with "Low Disk Space" title
+- [ ] Subsequent scans while still under pressure do NOT fire additional notifications
+- [ ] After space recovers and then drops below threshold again, a new notification fires (new episode)
+- [ ] Setting threshold very high (e.g., 999 GB) triggers the banner on next scan
+- [ ] Setting threshold below current free space hides the banner on next scan
+- [ ] Toggling "Low disk space warnings" off in Settings immediately hides the banner
+- [ ] Toggling "Low disk space warnings" on with threshold above free space shows the banner and fires notification
+- [ ] "Free space threshold" row is hidden in Settings when the toggle is off
+- [ ] "Free space threshold" row appears in Settings when the toggle is on
+- [ ] Threshold values are clamped to 1-500 GB range
+- [ ] Disk pressure settings persist after app relaunch
+- [ ] Banner is not shown when disk space cannot be read (fail-open behavior)
+- [ ] When "Notifications" toggle is off while disk is under pressure, no notification fires; re-enabling notifications does NOT retroactively fire one for the ongoing episode
+- [ ] When disk pressure feature is disabled then re-enabled while still under pressure, a new notification fires (toggle off+on starts a new episode)
+- [ ] When free space is exactly equal to the threshold (e.g., both 10 GB), no banner and no notification appears (strict less-than boundary)
+- [ ] When both disk pressure banner and update banner are active simultaneously, both display without layout overflow or clipping
+- [ ] Entering a value outside 1–500 GB, closing Settings, and relaunching loads the clamped value from UserDefaults
+- [ ] With rapid FSEvents-triggered scans while under pressure, only one "Low Disk Space" notification fires (not one per scan)
