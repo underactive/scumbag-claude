@@ -7,6 +7,7 @@ enum DeleteConfirmation: Equatable {
     case project(String)
     case all
     case brokenSymlinks
+    case selectedFiles
 }
 
 private enum ProjectSortOrder: String, CaseIterable {
@@ -127,6 +128,7 @@ struct ContentView: View {
     @State private var projectsContentHeight: CGFloat = 0
     @State private var searchQuery: String = ""
     @State private var sortOrder: ProjectSortOrder = .size
+    @State private var selectedFiles: Set<String> = []
     var onOpenSettings: () -> Void = {}
     var onOpenStats: () -> Void = {}
 
@@ -160,6 +162,7 @@ struct ContentView: View {
         .onAppear {
             confirmDelete = nil
             searchQuery = ""
+            selectedFiles = []
         }
         .onChange(of: searchQuery) { _ in confirmDelete = nil }
     }
@@ -358,6 +361,9 @@ struct ContentView: View {
                             .foregroundColor(.red)
                     }
                     Text(" · \(project.claudeDir)")
+                    if project.lastModified != .distantPast {
+                        Text(" · \(relativeTime(project.lastModified))")
+                    }
                 }
                 .font(.caption)
                 .foregroundColor(.secondary)
@@ -382,6 +388,7 @@ struct ContentView: View {
                     .buttonStyle(.bordered)
                     .controlSize(.mini)
                 Button("Delete") {
+                    selectedFiles.subtract(project.files.map(\.id))
                     monitor.deleteProject(project)
                     confirmDelete = nil
                 }
@@ -411,11 +418,19 @@ struct ContentView: View {
                 fileRow(file)
             }
         }
-        .padding(.leading, 24)
+        .padding(.leading, 16)
     }
 
     private func fileRow(_ file: MonitoredFile) -> some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 4) {
+            Button(action: { toggleFileSelection(file.id) }) {
+                Image(systemName: selectedFiles.contains(file.id) ? "checkmark.circle.fill" : "circle")
+                    .font(.caption2)
+                    .foregroundColor(selectedFiles.contains(file.id) ? .accentColor : .secondary.opacity(0.4))
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(selectedFiles.contains(file.id) ? "Deselect file" : "Select file")
+
             Image(systemName: file.isSymlink ? "link" : "doc")
                 .font(.caption2)
                 .foregroundColor(file.isBrokenSymlink ? .red : .secondary)
@@ -468,6 +483,9 @@ struct ContentView: View {
                 Text(formatBytes(file.size))
                     .font(.caption.monospacedDigit())
                     .foregroundColor(sizeColor(file.size))
+                Text(relativeTime(file.lastModified))
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
             }
 
             if let rate = file.growthRate, let rateText = formatGrowthRate(rate) {
@@ -483,6 +501,7 @@ struct ContentView: View {
                     .controlSize(.mini)
                 Button("Delete") {
                     monitor.deleteFile(file)
+                    selectedFiles.remove(file.id)
                     confirmDelete = nil
                 }
                 .font(.caption2)
@@ -635,6 +654,27 @@ struct ContentView: View {
 
                 Spacer()
 
+                if selectedFileCount > 0 {
+                    if confirmDelete == .selectedFiles {
+                        Button("Cancel") { confirmDelete = nil }
+                            .font(.caption)
+                        Button("Confirm") {
+                            let files = monitor.projects.flatMap(\.files).filter { selectedFiles.contains($0.id) }
+                            monitor.deleteFiles(files)
+                            selectedFiles = []
+                            confirmDelete = nil
+                        }
+                        .font(.caption)
+                        .tint(.red)
+                    } else {
+                        Button(action: { confirmDelete = .selectedFiles }) {
+                            Text("Delete (\(selectedFileCount))")
+                                .font(.subheadline)
+                        }
+                        .tint(.orange)
+                    }
+                }
+
                 if brokenSymlinkCount > 0 {
                     if confirmDelete == .brokenSymlinks {
                         Button("Cancel") { confirmDelete = nil }
@@ -660,6 +700,7 @@ struct ContentView: View {
                             .font(.caption)
                         Button("Confirm") {
                             monitor.deleteAllProjects()
+                            selectedFiles = []
                             confirmDelete = nil
                         }
                         .font(.caption)
@@ -727,6 +768,19 @@ struct ContentView: View {
             return $0.lastModified > $1.lastModified
         }
         }
+    }
+
+    private func toggleFileSelection(_ id: String) {
+        if selectedFiles.contains(id) {
+            selectedFiles.remove(id)
+        } else {
+            selectedFiles.insert(id)
+        }
+    }
+
+    private var selectedFileCount: Int {
+        let currentIds = Set(monitor.projects.flatMap(\.files).map(\.id))
+        return selectedFiles.intersection(currentIds).count
     }
 
     private func sizeColor(_ bytes: UInt64) -> Color {

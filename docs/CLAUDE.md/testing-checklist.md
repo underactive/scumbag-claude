@@ -269,6 +269,26 @@
 - [ ] Sort order persists within a session (across popover open/close) but resets on app restart
 - [ ] Delete confirmation on a project is cleared when typing in the search field
 
+## File Timestamps
+- [ ] File rows show relative timestamp next to size (e.g., "2m", "3h", "2d")
+- [ ] Project subtitle shows relative modification time after claudeDir
+- [ ] Timestamps update after each scan
+- [ ] Broken symlinks do not show a timestamp (they have no valid modification date)
+- [ ] Files older than 7 days show "MMM d" format (e.g., "Mar 15")
+
+## Batch File Delete
+- [ ] Selection circles appear on every file row (left side, before file icon)
+- [ ] Clicking a selection circle toggles it between empty and filled
+- [ ] "Delete (N)" button appears in footer when files are selected
+- [ ] Clicking "Delete (N)" shows Confirm/Cancel buttons
+- [ ] Confirming deletes all selected files and clears selection
+- [ ] Selection is cleared when popover is closed and reopened
+- [ ] Selection survives search filter changes (files remain selected when hidden by filter)
+- [ ] Deleting a project clears selection for files in that project
+- [ ] "Clean All" clears all file selections
+- [ ] Selected file count in footer reflects actual selection regardless of search filter
+- [ ] Batch delete handles symlink targets correctly (same scope rules as single delete)
+
 ## Notifications
 - [ ] Warning notification fires when a file crosses the warning threshold
 - [ ] Critical notification fires when a file crosses the critical threshold
