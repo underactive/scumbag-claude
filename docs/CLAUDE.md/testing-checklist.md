@@ -122,6 +122,16 @@
 - [ ] Fallback timer still fires on schedule when no filesystem changes occur
 - [ ] Manual refresh (Cmd+R) still works alongside FSEvents monitoring
 
+## Menubar Trend Indicator
+- [ ] First scan shows no trend arrow next to size in menubar (no prior data, defaults to stable)
+- [ ] When total file size increases between scans, menubar shows ↑ next to size
+- [ ] When total file size decreases between scans (e.g., after deleting files), menubar shows ↓ next to size
+- [ ] When total file size stays the same between scans, no trend arrow is shown (stable = hidden)
+- [ ] Trend arrow is not shown when "Show size in menu bar" is disabled
+- [ ] Trend arrow is not shown when total size is 0 (no files)
+- [ ] Changes smaller than 1 KB do not flip the arrow (dead zone)
+- [ ] Change of exactly 1024 bytes shows no arrow (stable, boundary test)
+
 ## Growth Rate Tracking
 - [ ] First scan shows no growth rate indicators (no prior data)
 - [ ] Second scan shows "↑ X.X MB/min" on project row when files grew between scans

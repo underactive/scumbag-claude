@@ -65,6 +65,19 @@ enum MonitorStatus: String {
     case critical = "Critical"
 }
 
+/// Direction of total monitored size change between consecutive scans (1 KB dead zone).
+enum SizeTrend {
+    case growing, stable, shrinking
+
+    var indicator: String {
+        switch self {
+        case .growing: return "↑"
+        case .stable: return ""
+        case .shrinking: return "↓"
+        }
+    }
+}
+
 // MARK: - Monitor Service
 
 @MainActor
@@ -76,6 +89,7 @@ class MonitorService: ObservableObject {
     @Published var lastScanTime: Date?
     @Published var nextScanTime: Date?
     @Published var isScanning = false
+    @Published var sizeTrend: SizeTrend = .stable
     @Published var lastDeleteError: String?
     @Published var notificationsDenied: Bool = false
 
@@ -143,7 +157,9 @@ class MonitorService: ObservableObject {
     private var timer: Timer?
     private var eventStream: FSEventStreamRef?
     private var debouncedScanTask: Task<Void, Never>?
+    private static let trendChangeThreshold: UInt64 = 1024 // 1 KB dead zone to filter noise
     private var previousSizes: [String: (size: UInt64, time: Date)] = [:]
+    private var previousTotalSize: UInt64?
     private var notifiedPaths: Set<String> = []
     private var isUpdatingLaunchAtLogin = false
 
@@ -575,6 +591,18 @@ class MonitorService: ObservableObject {
         totalSize = projects.reduce(0) { $0 + $1.totalSize }
         totalFileCount = projects.reduce(0) { $0 + $1.files.count }
         lastScanTime = scanTime
+
+        // Compute menubar trend indicator by comparing to previous scan
+        if let prev = previousTotalSize {
+            if totalSize > prev + Self.trendChangeThreshold {
+                sizeTrend = .growing
+            } else if prev > totalSize + Self.trendChangeThreshold {
+                sizeTrend = .shrinking
+            } else {
+                sizeTrend = .stable
+            }
+        }
+        previousTotalSize = totalSize
 
         // Rebuild previousSizes from current scan (implicitly prunes stale entries).
         // Carry forward the previous timestamp when size hasn't changed, so that

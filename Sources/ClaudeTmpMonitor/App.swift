@@ -129,9 +129,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         ).target = self
 
         // Reactive icon/title updates
-        monitor.$status.combineLatest(monitor.$totalSize, monitor.$showSizeInMenuBar)
-            .sink { [weak self] status, totalSize, showSize in
-                self?.updateStatusItemAppearance(status: status, totalSize: totalSize, showSize: showSize)
+        monitor.$status.combineLatest(monitor.$totalSize, monitor.$showSizeInMenuBar, monitor.$sizeTrend)
+            .sink { [weak self] status, totalSize, showSize, trend in
+                self?.updateStatusItemAppearance(status: status, totalSize: totalSize, showSize: showSize, trend: trend)
             }
             .store(in: &cancellables)
     }
@@ -165,11 +165,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func updateStatusItemAppearance(status: MonitorStatus, totalSize: UInt64, showSize: Bool) {
+    private func updateStatusItemAppearance(status: MonitorStatus, totalSize: UInt64, showSize: Bool, trend: SizeTrend) {
         guard let button = statusItem.button else { return }
         button.image = Self.image(for: status)
         if showSize && totalSize > 0 {
-            button.title = " \(formatBytes(totalSize))"
+            let trendSuffix = trend.indicator.isEmpty ? "" : " \(trend.indicator)"
+            button.title = " \(formatBytes(totalSize))\(trendSuffix)"
         } else {
             button.title = ""
         }
