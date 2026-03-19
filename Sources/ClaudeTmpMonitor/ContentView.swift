@@ -118,6 +118,7 @@ struct ContentView: View {
     @EnvironmentObject var historyService: HistoryService
     @State private var expandedProjects: Set<String> = []
     @State private var confirmDelete: DeleteConfirmation? = nil
+    @State private var projectsContentHeight: CGFloat = 0
     var onOpenSettings: () -> Void = {}
     var onOpenStats: () -> Void = {}
 
@@ -225,9 +226,11 @@ struct ContentView: View {
 
     // MARK: - Projects List
 
+    private static let maxProjectsHeight: CGFloat = 300
+
     private var projectsSection: some View {
         ScrollView {
-            LazyVStack(alignment: .leading, spacing: 0) {
+            VStack(alignment: .leading, spacing: 0) {
                 ForEach(monitor.projects) { project in
                     VStack(alignment: .leading, spacing: 0) {
                         projectRow(project)
@@ -237,8 +240,14 @@ struct ContentView: View {
                     }
                 }
             }
+            .background(
+                GeometryReader { geo in
+                    Color.clear.preference(key: ProjectsHeightKey.self, value: geo.size.height)
+                }
+            )
         }
-        .frame(minHeight: 60, maxHeight: 300)
+        .frame(height: min(max(projectsContentHeight, 1), Self.maxProjectsHeight))
+        .onPreferenceChange(ProjectsHeightKey.self) { projectsContentHeight = $0 }
     }
 
     private func projectRow(_ project: ClaudeProject) -> some View {
@@ -621,5 +630,14 @@ struct ContentView: View {
         if bytes >= monitor.criticalBytes { return .red }
         if bytes >= monitor.warningBytes { return .orange }
         return .primary
+    }
+}
+
+// MARK: - Preference Keys
+
+private struct ProjectsHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
     }
 }

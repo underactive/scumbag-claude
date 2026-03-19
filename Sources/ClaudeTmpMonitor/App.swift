@@ -88,11 +88,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             button.target = self
         }
 
-        // Popover
+        // Popover — sizingOptions lets the hosting controller drive the popover size
+        // dynamically based on SwiftUI content, so it shrinks when there are few projects.
         popover = NSPopover()
         popover.behavior = .transient
-        popover.contentSize = NSSize(width: 380, height: 400)
-        popover.contentViewController = NSHostingController(
+        let hostingController = NSHostingController(
             rootView: ContentView(
                     onOpenSettings: { [weak self] in self?.openSettings() },
                     onOpenStats: { [weak self] in self?.openStats() }
@@ -101,6 +101,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 .environmentObject(updateService)
                 .environmentObject(historyService)
         )
+        hostingController.sizingOptions = .preferredContentSize
+        popover.contentViewController = hostingController
 
         // Right-click menu
         rightClickMenu = NSMenu()
