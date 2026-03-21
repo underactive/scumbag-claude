@@ -4,7 +4,7 @@
 
 **Scumbag Claude** (aka Claude Tmp Monitor) is a macOS menubar application that monitors Claude Code's temporary file directories (`/private/tmp/claude-*/`) for large `.output` files and stale task directories, alerting the user and providing quick cleanup actions.
 
-**Current Version:** 0.6.0
+**Current Version:** 0.6.1
 **Status:** In development
 
 ---
@@ -374,7 +374,7 @@ Version string appears in 2 files:
 | `CLAUDE_TEMPLATE.md` | Template for generating CLAUDE.md files |
 | `docs/` | Plans, testing checklist, version history, future improvements |
 | `docs/CLAUDE.md/plans/` | Plan, implementation, and audit records (epoch-prefixed directories for chronological ordering) |
-| `assets/` | Source artwork (`ScumbagCap.png`) used to generate menubar icon silhouette |
+| `assets/` | Source artwork (`ScumbagCap.png`) for menubar icon silhouette, DMG installer background (`dmg-background.png`) |
 
 ---
 

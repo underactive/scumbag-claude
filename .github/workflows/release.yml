@@ -80,14 +80,23 @@ jobs:
         id: version
         run: echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
 
+      - name: Install create-dmg
+        run: brew install create-dmg
+
       - name: Create DMG
         run: |
-          hdiutil create \
-            -volname "Scumbag Claude" \
-            -srcfolder ".build/release/Scumbag Claude.app" \
-            -ov \
-            -format UDZO \
-            ".build/release/Scumbag-Claude-${{ steps.version.outputs.tag }}.dmg"
+          create-dmg \
+            --volname "Scumbag Claude" \
+            --window-pos 200 120 \
+            --window-size 600 400 \
+            --icon-size 100 \
+            --icon "Scumbag Claude.app" 150 185 \
+            --app-drop-link 450 185 \
+            --background assets/dmg-background.png \
+            --hide-extension "Scumbag Claude.app" \
+            --no-internet-enable \
+            ".build/release/Scumbag-Claude-${{ steps.version.outputs.tag }}.dmg" \
+            ".build/release/Scumbag Claude.app"
 
       - name: Download Sparkle tools
         run: |
