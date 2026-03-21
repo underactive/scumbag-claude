@@ -36,6 +36,9 @@ sign: bundle
 
 install: sign
 	@echo "Installing to /Applications..."
+	@pkill -x "$(EXECUTABLE)" 2>/dev/null || true
+	@sleep 0.5
+	@rm -rf "/Applications/$(BUNDLE_NAME)"
 	@cp -R "$(RELEASE_DIR)/$(BUNDLE_NAME)" /Applications/
 	@echo "Installed: /Applications/$(BUNDLE_NAME)"
 
