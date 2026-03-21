@@ -60,17 +60,21 @@ jobs:
         id: version
         run: echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT"
 
-      - name: Create zip archive
+      - name: Create DMG
         run: |
-          cd .build/release
-          zip -r "Scumbag-Claude-${{ steps.version.outputs.tag }}.zip" "Scumbag Claude.app"
+          hdiutil create \
+            -volname "Scumbag Claude" \
+            -srcfolder ".build/release/Scumbag Claude.app" \
+            -ov \
+            -format UDZO \
+            ".build/release/Scumbag-Claude-${{ steps.version.outputs.tag }}.dmg"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           name: Scumbag Claude ${{ steps.version.outputs.tag }}
           generate_release_notes: true
-          files: .build/release/Scumbag-Claude-${{ steps.version.outputs.tag }}.zip
+          files: .build/release/Scumbag-Claude-${{ steps.version.outputs.tag }}.dmg
 
       - name: Cleanup keychain
         if: always()

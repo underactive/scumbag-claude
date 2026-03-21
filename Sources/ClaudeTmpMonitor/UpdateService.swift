@@ -231,7 +231,7 @@ class UpdateService: ObservableObject {
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let tagName = json["tag_name"] as? String,
               let assets = json["assets"] as? [[String: Any]],
-              let firstAsset = assets.first(where: { ($0["name"] as? String)?.hasSuffix(".zip") == true }),
+              let firstAsset = assets.first(where: { ($0["name"] as? String)?.hasSuffix(".dmg") == true }),
               let downloadURLString = firstAsset["browser_download_url"] as? String,
               let downloadURL = URL(string: downloadURLString) else {
             throw UpdateError.parseError
@@ -271,10 +271,10 @@ class UpdateService: ObservableObject {
                 return
             }
 
-            let zipPath = tempDir.appendingPathComponent("update.zip")
-            try fm.moveItem(at: tempURL, to: zipPath)
+            let dmgPath = tempDir.appendingPathComponent("update.dmg")
+            try fm.moveItem(at: tempURL, to: dmgPath)
 
-            let appBundle = try await extractAndFindApp(zipPath: zipPath, tempDir: tempDir)
+            let appBundle = try await extractAppFromDMG(dmgPath: dmgPath, tempDir: tempDir)
 
             status = .readyToInstall(appPath: appBundle)
         } catch is CancellationError {
@@ -286,33 +286,79 @@ class UpdateService: ObservableObject {
         }
     }
 
-    private func extractAndFindApp(zipPath: URL, tempDir: URL) async throws -> URL {
-        // Run ditto on a background thread to avoid blocking the main thread
-        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+    private func extractAppFromDMG(dmgPath: URL, tempDir: URL) async throws -> URL {
+        // Mount DMG, copy .app out, detach — all on a background thread to avoid blocking @MainActor
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<URL, Error>) in
             DispatchQueue.global(qos: .userInitiated).async {
-                let unzipProcess = Process()
-                unzipProcess.executableURL = URL(fileURLWithPath: "/usr/bin/ditto")
-                unzipProcess.arguments = ["-xk", zipPath.path, tempDir.path]
-                do {
-                    try unzipProcess.run()
-                    unzipProcess.waitUntilExit()
-                    if unzipProcess.terminationStatus == 0 {
-                        continuation.resume()
-                    } else {
-                        continuation.resume(throwing: UpdateError.extractionFailed)
+                // Mount the DMG
+                let mountResult = Self.mountDMGSync(dmgPath: dmgPath)
+                guard case .success(let mountPoint) = mountResult else {
+                    if case .failure(let error) = mountResult {
+                        continuation.resume(throwing: error)
                     }
+                    return
+                }
+                defer {
+                    let detach = Process()
+                    detach.executableURL = URL(fileURLWithPath: "/usr/bin/hdiutil")
+                    detach.arguments = ["detach", mountPoint, "-quiet"]
+                    try? detach.run()
+                    detach.waitUntilExit()
+                }
+
+                // Find the .app bundle on the mounted volume
+                let volumeURL = URL(fileURLWithPath: mountPoint)
+                do {
+                    let contents = try FileManager.default.contentsOfDirectory(
+                        at: volumeURL, includingPropertiesForKeys: nil
+                    )
+                    guard let appSource = contents.first(where: { $0.pathExtension == "app" }) else {
+                        continuation.resume(throwing: UpdateError.noAppInArchive)
+                        return
+                    }
+
+                    // Copy .app out of the read-only volume into the temp directory
+                    let appDest = tempDir.appendingPathComponent(appSource.lastPathComponent)
+                    try FileManager.default.copyItem(at: appSource, to: appDest)
+                    continuation.resume(returning: appDest)
+                } catch let error as UpdateError {
+                    continuation.resume(throwing: error)
                 } catch {
                     continuation.resume(throwing: error)
                 }
             }
         }
+    }
 
-        let extractedContents = try FileManager.default.contentsOfDirectory(at: tempDir, includingPropertiesForKeys: nil)
-        guard let appBundle = extractedContents.first(where: { $0.pathExtension == "app" }) else {
-            throw UpdateError.noAppInArchive
+    private nonisolated static func mountDMGSync(dmgPath: URL) -> Result<String, Error> {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/hdiutil")
+        process.arguments = ["attach", dmgPath.path, "-nobrowse", "-readonly", "-plist"]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+
+            guard process.terminationStatus == 0 else {
+                return .failure(UpdateError.mountFailed)
+            }
+
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            guard let plist = try PropertyListSerialization.propertyList(
+                from: data, format: nil
+            ) as? [String: Any],
+            let entities = plist["system-entities"] as? [[String: Any]],
+            let mountEntity = entities.first(where: { $0["mount-point"] != nil }),
+            let mountPoint = mountEntity["mount-point"] as? String else {
+                return .failure(UpdateError.mountFailed)
+            }
+
+            return .success(mountPoint)
+        } catch {
+            return .failure(error)
         }
-
-        return appBundle
     }
 
     // MARK: - Private: Persistence
@@ -359,14 +405,14 @@ class UpdateService: ObservableObject {
 private enum UpdateError: LocalizedError {
     case apiError
     case parseError
-    case extractionFailed
+    case mountFailed
     case noAppInArchive
 
     var errorDescription: String? {
         switch self {
         case .apiError: return "GitHub API returned an error. Try again later."
         case .parseError: return "Could not parse release information."
-        case .extractionFailed: return "Failed to extract update archive."
+        case .mountFailed: return "Failed to mount update disk image."
         case .noAppInArchive: return "Update archive does not contain an application."
         }
     }

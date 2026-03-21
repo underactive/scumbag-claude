@@ -122,7 +122,7 @@ diskPressureThresholdGB: Int    // default: 10, range: 1...500
 - Compares remote `tag_name` (stripped of leading "v") against `CFBundleShortVersionString` using semantic version comparison
 - States: `.idle` → `.checking` → `.available(version, downloadURL, releaseNotes)` / `.upToDate` / `.error(msg)`
 - Download flow: `.available` → `.downloading(progress)` → `.readyToInstall(appPath)` → `.installing`
-- Downloads zip to temp directory, extracts with `/usr/bin/ditto -xk`, verifies `.app` bundle exists
+- Downloads DMG to temp directory, mounts with `hdiutil attach`, copies `.app` out, detaches volume
 - Self-replacement: writes a bash script that waits for current process to exit, replaces the `.app` bundle, clears quarantine (`xattr -cr`), and relaunches
 - Pre-checks `Bundle.main.bundlePath` for `.app` suffix and write permissions; shows manual update message for dev builds
 - Release builds are code-signed with a Developer ID certificate and notarized by Apple, so downloads open without Gatekeeper warnings
@@ -197,7 +197,7 @@ No external services or third-party SDKs. All operations are local filesystem an
 2. **Hardcoded skip words in `extractProjectName`** — The display name extractor has a hardcoded `skipWords` set (`Users`, `Development`, `personal`, `hardware`, `esison`) that won't work for other users.
 3. **No TOCTOU protection on delete** — Symlink targets are not re-resolved at delete time. A symlink could be retargeted between scan and delete. Deferred to separate plan.
 4. **Gatekeeper quarantine on auto-update** — Downloaded update may trigger Gatekeeper re-validation. Mitigated by `xattr -cr` in the updater script, but users may see a brief security prompt.
-5. **No delta updates** — Auto-update downloads the full zip archive every time. No binary diff/patch mechanism.
+5. **No delta updates** — Auto-update downloads the full DMG every time. No binary diff/patch mechanism.
 6. **No checksum verification on updates** — Downloaded zip is not verified against a SHA256 hash. Relies on HTTPS transport security.
 7. **Watchdog Bash parsing is best-effort** — The file write watchdog catches obvious destructive patterns (`rm /path`, `mv`, `>`) but won't catch commands using variables (`rm $FILE`), subshells, or piped commands where the final target isn't visible. Designed as a safety net, not a sandbox.
 8. **Watchdog hook persists independently** — If the app is uninstalled without disabling the watchdog, the hook entry remains in `~/.claude/settings.local.json` and will cause errors on every Claude tool call (script not found). Both `fileOpsEnabled` and `commandWatchdogEnabled` persist independently in UserDefaults; the hook is installed whenever either is enabled.
