@@ -4,7 +4,7 @@ EXECUTABLE = ClaudeTmpMonitor
 BUILD_DIR = .build
 RELEASE_DIR = $(BUILD_DIR)/release
 
-.PHONY: build run bundle clean
+.PHONY: build run bundle sign clean
 
 build:
 	swift build -c release
@@ -19,11 +19,22 @@ bundle: build
 	@cp $(RELEASE_DIR)/$(EXECUTABLE) "$(RELEASE_DIR)/$(BUNDLE_NAME)/Contents/MacOS/"
 	@cp Info.plist "$(RELEASE_DIR)/$(BUNDLE_NAME)/Contents/"
 	@cp Sources/ClaudeTmpMonitor/Resources/AppIcon.icns "$(RELEASE_DIR)/$(BUNDLE_NAME)/Contents/Resources/"
-	@# Copy SPM resource bundle next to executable (where resource_bundle_accessor.swift looks first)
-	@cp -R $(RELEASE_DIR)/ClaudeTmpMonitor_ClaudeTmpMonitor.bundle "$(RELEASE_DIR)/$(BUNDLE_NAME)/Contents/MacOS/" 2>/dev/null || true
+	@# Copy SPM resource bundle to Resources (standard location, avoids codesign issues)
+	@cp -R $(RELEASE_DIR)/ClaudeTmpMonitor_ClaudeTmpMonitor.bundle "$(RELEASE_DIR)/$(BUNDLE_NAME)/Contents/Resources/" 2>/dev/null || true
 	@echo "Built: $(RELEASE_DIR)/$(BUNDLE_NAME)"
 
-install: bundle
+sign: bundle
+	@if security find-identity -v -p codesigning | grep -q "Developer ID Application"; then \
+		IDENTITY=$$(security find-identity -v -p codesigning | grep "Developer ID Application" | head -1 | sed 's/.*"\(.*\)"/\1/'); \
+		echo "Signing with: $$IDENTITY"; \
+		codesign --force --options runtime --sign "$$IDENTITY" "$(RELEASE_DIR)/$(BUNDLE_NAME)"; \
+		codesign --verify --deep --strict "$(RELEASE_DIR)/$(BUNDLE_NAME)"; \
+		echo "Signed and verified: $(RELEASE_DIR)/$(BUNDLE_NAME)"; \
+	else \
+		echo "Warning: No Developer ID certificate found, skipping code signing"; \
+	fi
+
+install: sign
 	@echo "Installing to /Applications..."
 	@cp -R "$(RELEASE_DIR)/$(BUNDLE_NAME)" /Applications/
 	@echo "Installed: /Applications/$(BUNDLE_NAME)"
