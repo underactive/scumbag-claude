@@ -18,5 +18,13 @@
             <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
             <enclosure url="https://github.com/underactive/scumbag-claude/releases/download/v0.6.0/Scumbag-Claude-v0.6.0.dmg" length="2979204" type="application/octet-stream" sparkle:edSignature="cOZNkeRooXarWnSB9wUbv8ssdPeX/ZsXYkbTd7Z5CQWsNmpjFr2QeShA+liDrOdG5JAiHYeBZqJcTNCIHdSxDg==" />
         </item>
+        <item>
+            <title>Version 0.6.1</title>
+            <pubDate>Sat, 21 Mar 2026 22:20:59 +0000</pubDate>
+            <sparkle:version>0.6.1</sparkle:version>
+            <sparkle:shortVersionString>0.6.1</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/underactive/scumbag-claude/releases/download/v0.6.1/Scumbag-Claude-v0.6.1.dmg" length="2945722" type="application/octet-stream" sparkle:edSignature="1tu436nJVIFe7HFEAserZpo8+KWwjD6J0vQ+J8SnWPBBPfOJN7MeIBXhG0ZbjWCNSXdqKYUFAkzyDTNff7umBA==" />
+        </item>
 </channel>
 </rss>
