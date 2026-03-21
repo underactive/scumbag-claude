@@ -17,6 +17,7 @@ struct SettingsView: View {
                 .tabItem { Label("Blocked Commands", systemImage: "nosign") }
         }
         .padding(12)
+        .frame(width: 396, height: 420)
     }
 
     // MARK: - General Tab
@@ -83,25 +84,27 @@ struct SettingsView: View {
                     .foregroundColor(.secondary)
                     .padding(.top, 4)
 
-                VStack(spacing: 0) {
-                    ForEach(Array(watchdogService.allowedDirectories.enumerated()), id: \.element) { index, dir in
-                        HStack {
-                            Text(dir)
-                                .font(.system(.caption, design: .monospaced))
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                            Spacer()
-                            Button(action: { watchdogService.removeDirectory(at: index) }) {
-                                Image(systemName: "minus.circle")
-                                    .font(.caption)
-                                    .foregroundColor(.red)
+                ScrollView {
+                    VStack(spacing: 0) {
+                        ForEach(Array(watchdogService.allowedDirectories.enumerated()), id: \.element) { index, dir in
+                            HStack {
+                                Text(dir)
+                                    .font(.system(.caption, design: .monospaced))
+                                    .lineLimit(1)
+                                    .truncationMode(.middle)
+                                Spacer()
+                                Button(action: { watchdogService.removeDirectory(at: index) }) {
+                                    Image(systemName: "minus.circle")
+                                        .font(.caption)
+                                        .foregroundColor(.red)
+                                }
+                                .buttonStyle(.plain)
                             }
-                            .buttonStyle(.plain)
-                        }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        if index < watchdogService.allowedDirectories.count - 1 {
-                            Divider()
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            if index < watchdogService.allowedDirectories.count - 1 {
+                                Divider()
+                            }
                         }
                     }
                 }
@@ -150,25 +153,27 @@ struct SettingsView: View {
                     .foregroundColor(.secondary)
                     .padding(.top, 4)
 
-                VStack(spacing: 0) {
-                    ForEach(Array(watchdogService.blockedCommands.enumerated()), id: \.element) {
-                        index, cmd in
-                        HStack {
-                            Text(cmd)
-                                .font(.system(.caption, design: .monospaced))
-                                .lineLimit(1)
-                            Spacer()
-                            Button(action: { watchdogService.removeBlockedCommand(at: index) }) {
-                                Image(systemName: "minus.circle")
-                                    .font(.caption)
-                                    .foregroundColor(.red)
+                ScrollView {
+                    VStack(spacing: 0) {
+                        ForEach(Array(watchdogService.blockedCommands.enumerated()), id: \.element) {
+                            index, cmd in
+                            HStack {
+                                Text(cmd)
+                                    .font(.system(.caption, design: .monospaced))
+                                    .lineLimit(1)
+                                Spacer()
+                                Button(action: { watchdogService.removeBlockedCommand(at: index) }) {
+                                    Image(systemName: "minus.circle")
+                                        .font(.caption)
+                                        .foregroundColor(.red)
+                                }
+                                .buttonStyle(.plain)
                             }
-                            .buttonStyle(.plain)
-                        }
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 4)
-                        if index < watchdogService.blockedCommands.count - 1 {
-                            Divider()
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            if index < watchdogService.blockedCommands.count - 1 {
+                                Divider()
+                            }
                         }
                     }
                 }
