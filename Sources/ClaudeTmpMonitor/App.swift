@@ -9,9 +9,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var rightClickMenu: NSMenu!
     let monitor = MonitorService()
     let updateService = UpdateService()
+    let historyService = HistoryService()
+    let watchdogService = WatchdogService()
     private var cancellables = Set<AnyCancellable>()
     private var settingsWindow: NSWindow?
     private var aboutWindow: NSWindow?
+    private var statsWindow: NSWindow?
 
     // MARK: - Pre-cached menubar icons
 
@@ -65,6 +68,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.setActivationPolicy(.accessory)
 
+        // Wire scan callback to history service
+        monitor.onScanComplete = { [weak self] totalSize, fileCount, projects in
+            self?.historyService.recordSnapshot(
+                totalSize: totalSize,
+                totalFileCount: fileCount,
+                projects: projects
+            )
+        }
+
         // Status item
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
 
@@ -76,15 +88,21 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             button.target = self
         }
 
-        // Popover
+        // Popover — sizingOptions lets the hosting controller drive the popover size
+        // dynamically based on SwiftUI content, so it shrinks when there are few projects.
         popover = NSPopover()
         popover.behavior = .transient
-        popover.contentSize = NSSize(width: 380, height: 400)
-        popover.contentViewController = NSHostingController(
-            rootView: ContentView(onOpenSettings: { [weak self] in self?.openSettings() })
+        let hostingController = NSHostingController(
+            rootView: ContentView(
+                    onOpenSettings: { [weak self] in self?.openSettings() },
+                    onOpenStats: { [weak self] in self?.openStats() }
+                )
                 .environmentObject(monitor)
                 .environmentObject(updateService)
+                .environmentObject(historyService)
         )
+        hostingController.sizingOptions = .preferredContentSize
+        popover.contentViewController = hostingController
 
         // Right-click menu
         rightClickMenu = NSMenu()
@@ -98,6 +116,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             action: #selector(checkForUpdates),
             keyEquivalent: ""
         ).target = self
+        rightClickMenu.addItem(
+            withTitle: "Statistics",
+            action: #selector(openStats),
+            keyEquivalent: ""
+        ).target = self
         rightClickMenu.addItem(.separator())
         rightClickMenu.addItem(
             withTitle: "Quit",
@@ -106,11 +129,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         ).target = self
 
         // Reactive icon/title updates
-        monitor.$status.combineLatest(monitor.$totalSize, monitor.$showSizeInMenuBar)
-            .sink { [weak self] status, totalSize, showSize in
-                self?.updateStatusItemAppearance(status: status, totalSize: totalSize, showSize: showSize)
+        monitor.$status.combineLatest(monitor.$totalSize, monitor.$showSizeInMenuBar, monitor.$sizeTrend)
+            .sink { [weak self] status, totalSize, showSize, trend in
+                self?.updateStatusItemAppearance(status: status, totalSize: totalSize, showSize: showSize, trend: trend)
             }
             .store(in: &cancellables)
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        historyService.saveNow()
     }
 
     // MARK: - Status Item Actions
@@ -138,11 +165,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    private func updateStatusItemAppearance(status: MonitorStatus, totalSize: UInt64, showSize: Bool) {
+    private func updateStatusItemAppearance(status: MonitorStatus, totalSize: UInt64, showSize: Bool, trend: SizeTrend) {
         guard let button = statusItem.button else { return }
         button.image = Self.image(for: status)
         if showSize && totalSize > 0 {
-            button.title = " \(formatBytes(totalSize))"
+            let trendSuffix = trend.indicator.isEmpty ? "" : " \(trend.indicator)"
+            button.title = " \(formatBytes(totalSize))\(trendSuffix)"
         } else {
             button.title = ""
         }
@@ -172,18 +200,45 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let settingsView = SettingsView()
             .environmentObject(monitor)
             .environmentObject(updateService)
+            .environmentObject(historyService)
+            .environmentObject(watchdogService)
         let hostingController = NSHostingController(rootView: settingsView)
 
         let window = NSWindow(contentViewController: hostingController)
         window.title = "Settings"
-        window.styleMask = [.titled, .closable]
+        window.styleMask = [.titled, .closable, .resizable]
         window.isReleasedWhenClosed = false
-        window.setContentSize(NSSize(width: 350, height: 300))
+        window.setContentSize(NSSize(width: 420, height: 480))
         window.center()
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
 
         settingsWindow = window
+    }
+
+    // MARK: - Statistics Window
+
+    @objc func openStats() {
+        if let window = statsWindow {
+            window.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+
+        let statsView = StatsView()
+            .environmentObject(historyService)
+        let hostingController = NSHostingController(rootView: statsView)
+
+        let window = NSWindow(contentViewController: hostingController)
+        window.title = "Statistics"
+        window.styleMask = [.titled, .closable, .resizable]
+        window.isReleasedWhenClosed = false
+        window.setContentSize(NSSize(width: 700, height: 550))
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+
+        statsWindow = window
     }
 
     // MARK: - About Window
