@@ -107,12 +107,10 @@ jobs:
           DMG_SIZE=$(stat -f%z "$DMG_PATH")
           DMG_URL="https://github.com/underactive/scumbag-claude/releases/download/${VERSION}/Scumbag-Claude-${VERSION}.dmg"
 
-          # EdDSA signature via sign_update (reads SPARKLE_PRIVATE_KEY from env var)
-          SIGN_OUTPUT=$(/tmp/sparkle-tools/bin/sign_update "$DMG_PATH")
-          SIGNATURE=$(echo "$SIGN_OUTPUT" | grep 'sparkle:edSignature=' | sed 's/.*sparkle:edSignature="\([^"]*\)".*/\1/')
+          # EdDSA signature via sign_update (key piped via --ed-key-file -, -p for raw signature)
+          SIGNATURE=$(echo "$SPARKLE_PRIVATE_KEY" | /tmp/sparkle-tools/bin/sign_update --ed-key-file - -p "$DMG_PATH")
           if [ -z "$SIGNATURE" ]; then
-            echo "Error: Failed to extract EdDSA signature from sign_update output"
-            echo "sign_update output: $SIGN_OUTPUT"
+            echo "Error: Failed to generate EdDSA signature"
             exit 1
           fi
 
@@ -128,41 +126,40 @@ jobs:
             cd -
           fi
 
-          # Build the new appcast item
-          NEW_ITEM="    <item>
-              <title>Version ${VERSION_CLEAN}</title>
-              <pubDate>$(date -R)</pubDate>
-              <sparkle:version>${VERSION_CLEAN}</sparkle:version>
-              <sparkle:shortVersionString>${VERSION_CLEAN}</sparkle:shortVersionString>
-              <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
-              <enclosure url=\"${DMG_URL}\" length=\"${DMG_SIZE}\" type=\"application/octet-stream\" sparkle:edSignature=\"${SIGNATURE}\" />
-          </item>"
+          # Write the new appcast item to a temp file
+          printf '%s\n' \
+            '        <item>' \
+            "            <title>Version ${VERSION_CLEAN}</title>" \
+            "            <pubDate>$(date -R)</pubDate>" \
+            "            <sparkle:version>${VERSION_CLEAN}</sparkle:version>" \
+            "            <sparkle:shortVersionString>${VERSION_CLEAN}</sparkle:shortVersionString>" \
+            '            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>' \
+            "            <enclosure url=\"${DMG_URL}\" length=\"${DMG_SIZE}\" type=\"application/octet-stream\" sparkle:edSignature=\"${SIGNATURE}\" />" \
+            '        </item>' > /tmp/appcast_item.xml
 
-          if [ -f /tmp/gh-pages/appcast.xml ]; then
-            # Insert new item before closing </channel> tag
-            awk -v item="$NEW_ITEM" '/<\/channel>/ { print item } { print }' \
-              /tmp/gh-pages/appcast.xml > /tmp/gh-pages/appcast_new.xml
-            mv /tmp/gh-pages/appcast_new.xml /tmp/gh-pages/appcast.xml
+          if [ ! -f /tmp/gh-pages/appcast.xml ]; then
+            # Create new appcast with the item already inside
+            { printf '%s\n' '<?xml version="1.0" encoding="utf-8"?>' \
+                '<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">' \
+                '    <channel>' \
+                '        <title>Scumbag Claude</title>'
+              cat /tmp/appcast_item.xml
+              printf '%s\n' '    </channel>' '</rss>'
+            } > /tmp/gh-pages/appcast.xml
           else
-            cat > /tmp/gh-pages/appcast.xml <<'APPCAST_EOF'
-<?xml version="1.0" encoding="utf-8"?>
-<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
-    <channel>
-        <title>Scumbag Claude</title>
-    </channel>
-</rss>
-APPCAST_EOF
-            # Insert the first item into the fresh appcast
-            awk -v item="$NEW_ITEM" '/<\/channel>/ { print item } { print }' \
-              /tmp/gh-pages/appcast.xml > /tmp/gh-pages/appcast_new.xml
-            mv /tmp/gh-pages/appcast_new.xml /tmp/gh-pages/appcast.xml
+            # Insert item before </channel> in existing appcast
+            python3 -c "
+          c = open('/tmp/gh-pages/appcast.xml').read()
+          i = open('/tmp/appcast_item.xml').read()
+          open('/tmp/gh-pages/appcast.xml', 'w').write(c.replace('</channel>', i + '</channel>'))
+          "
           fi
 
           cd /tmp/gh-pages
           git add appcast.xml
           git -c user.name="github-actions[bot]" -c user.email="github-actions[bot]@users.noreply.github.com" \
             commit -m "Update appcast for ${VERSION}"
-          git push origin gh-pages
+          git push origin HEAD:gh-pages
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

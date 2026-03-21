@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-03-21
+
+### Changed
+
+- **Sparkle auto-update**: replaced custom 445-line `UpdateService` (GitHub API polling, DMG download/mount/extract, shell script self-replacement) with the Sparkle 2.x framework — the standard macOS auto-update solution used by Firefox, VLC, iTerm2, and hundreds of other apps
+- Updates are now verified with EdDSA (Ed25519) signatures, resolving the former lack of checksum verification
+- Sparkle provides its own native macOS update UI (version checking, release notes, download progress, installation) — the custom in-popover update banner has been removed
+- "Check for Updates..." in the right-click menu now opens Sparkle's standard update window instead of checking the GitHub API and showing results in the popover
+- About dialog simplified to show version only (update status display removed — Sparkle handles this in its own UI)
+- Auto-check toggle in Settings now binds directly to Sparkle's `SPUUpdater.automaticallyChecksForUpdates`
+- Update feed served via appcast.xml on GitHub Pages instead of polling the GitHub releases API
+- Release workflow updated: embeds Sparkle.framework with inside-out code signing (preserving XPC entitlements), generates EdDSA signatures for DMGs, and maintains the appcast on the `gh-pages` branch
+
+### Removed
+
+- `UpdateService.swift` (445 lines) — fully replaced by Sparkle framework
+- In-popover update banner (available/downloading/ready/installing/error states)
+- Update status display in About dialog (checking/available/up-to-date)
+- Three orphaned `SettingsKey` constants (`checkForUpdatesAutomatically`, `lastUpdateCheckTime`, `dismissedUpdateVersion`)
+
 ## [0.5.3] - 2026-03-20
 
 ### Fixed

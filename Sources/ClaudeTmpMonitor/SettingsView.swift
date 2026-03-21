@@ -7,6 +7,7 @@ struct SettingsView: View {
     @EnvironmentObject var monitor: MonitorService
     @EnvironmentObject var historyService: HistoryService
     @EnvironmentObject var watchdogService: WatchdogService
+    @State private var autoCheckForUpdates: Bool = true
 
     var body: some View {
         TabView {
@@ -59,15 +60,14 @@ struct SettingsView: View {
             Toggle("Launch at Login", isOn: $monitor.launchAtLogin)
                 .font(.subheadline)
 
-            Toggle("Check for updates automatically", isOn: Binding(
-                get: { updater.automaticallyChecksForUpdates },
-                set: { updater.automaticallyChecksForUpdates = $0 }
-            ))
+            Toggle("Check for updates automatically", isOn: $autoCheckForUpdates)
                 .font(.subheadline)
+                .onChange(of: autoCheckForUpdates) { updater.automaticallyChecksForUpdates = $0 }
 
             Spacer()
         }
         .padding(8)
+        .onAppear { autoCheckForUpdates = updater.automaticallyChecksForUpdates }
     }
 
     // MARK: - File Operations Tab
