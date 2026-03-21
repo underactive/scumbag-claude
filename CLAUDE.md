@@ -4,7 +4,7 @@
 
 **Scumbag Claude** (aka Claude Tmp Monitor) is a macOS menubar application that monitors Claude Code's temporary file directories (`/private/tmp/claude-*/`) for large `.output` files and stale task directories, alerting the user and providing quick cleanup actions.
 
-**Current Version:** 0.3.3
+**Current Version:** 0.5.0
 **Status:** In development
 
 ---
@@ -18,14 +18,17 @@ Not applicable — this is a software-only macOS application.
 ## Architecture
 
 ### Core Files
-Six-file SwiftUI app using a custom `NSStatusItem` for menubar integration.
+Nine-file SwiftUI app using a custom `NSStatusItem` for menubar integration.
 
-- `Sources/ClaudeTmpMonitor/App.swift` - Entry point: `@main` SwiftUI App with `NSApplicationDelegateAdaptor`. `AppDelegate` owns `MonitorService` and `UpdateService`, creates `NSStatusItem` with `NSPopover` (left-click) and `NSMenu` (right-click). Manages singleton `NSWindow` instances for Settings and About dialogs. Uses `Combine` subscriber on `monitor.$status` + `monitor.$totalSize` to reactively update menubar icon and title. Loads menubar icon from `Bundle.module` resources.
-- `Sources/ClaudeTmpMonitor/MonitorService.swift` - Core business logic: models (`MonitoredFile`, `ClaudeProject`, `MonitorStatus`), scanning, settings persistence, notifications, deletion
+- `Sources/ClaudeTmpMonitor/App.swift` - Entry point: `@main` SwiftUI App with `NSApplicationDelegateAdaptor`. `AppDelegate` owns `MonitorService`, `UpdateService`, and `HistoryService`, creates `NSStatusItem` with `NSPopover` (left-click) and `NSMenu` (right-click). Manages singleton `NSWindow` instances for Settings, About, and Statistics dialogs. Uses `Combine` subscriber on `monitor.$status` + `monitor.$totalSize` + `monitor.$sizeTrend` to reactively update menubar icon, title, and trend indicator. Wires `monitor.onScanComplete` callback to `HistoryService.recordSnapshot()`. Flushes history on `applicationWillTerminate`. Loads menubar icon from `Bundle.module` resources.
+- `Sources/ClaudeTmpMonitor/MonitorService.swift` - Core business logic: models (`MonitoredFile`, `ClaudeProject`, `MonitorStatus`, `SizeTrend`), FSEvents + timer-based scanning, growth rate tracking, active session detection, menubar trend indicator, symlink scope/deduplication visibility, disk pressure detection, settings persistence, notifications, deletion. Exposes `onScanComplete` callback invoked at the end of each `scan()`.
+- `Sources/ClaudeTmpMonitor/HistoryService.swift` - Historical data persistence: records scan snapshots (`HistorySnapshot`, `ProjectSnapshot` Codable models), two-tier aggregation (raw ≤1h, 5-minute buckets beyond), JSON storage in `~/Library/Application Support/com.esison.claude-tmp-monitor/history.json`, configurable retention (1–30 days), 60s save timer, querying by `TimeRange`.
 - `Sources/ClaudeTmpMonitor/UpdateService.swift` - Auto-update logic: GitHub releases API checking, download with progress, self-replacement via shell script, version comparison. Persists settings via UserDefaults.
-- `Sources/ClaudeTmpMonitor/ContentView.swift` - Main popover view: header, status bar, expandable projects list, update banner, footer with Settings button, Clean All, and Quit. Receives `onOpenSettings` closure from `AppDelegate`. Defines `HoverButtonStyle` (custom `ButtonStyle` with configurable hover color) used by icon-only buttons.
-- `Sources/ClaudeTmpMonitor/SettingsView.swift` - Settings dialog: threshold/interval rows, notifications toggle, launch at login toggle. Hosted in a separate `NSWindow`.
+- `Sources/ClaudeTmpMonitor/ContentView.swift` - Main popover view: header, status bar, search/filter field with sort menu (Size/Name/Date), expandable projects list with symlink scope/deduplication badges, pulsing green "live" badge for active sessions, broken symlink counts, relative timestamps and file selection circles for batch delete. Disk pressure banner (orange), update banner, footer with Settings button, Stats button, Delete Selected, Clean Broken, Clean All, and Quit. Search filters projects by display name (case-insensitive); sort order applies to both projects and files within expanded projects. Receives `onOpenSettings` and `onOpenStats` closures from `AppDelegate`. Defines `HoverButtonStyle` (custom `ButtonStyle` with configurable hover color) and `PulsingDot` (animated green circle for active session indicator) used by project rows.
+- `Sources/ClaudeTmpMonitor/StatsView.swift` - Statistics window: dual chart rendering — area+line chart for 1h range, stacked bar charts color-coded by project for 24h/7d/30d ranges. Hover tooltips show per-project breakdown (size, percentage). Flow layout color legend below chart. 12-color palette with deterministic project mapping. Retention hint for 30d range. Segmented time range picker (1h/24h/7d/30d), current/peak/average summary stats, empty state. Hosted in a separate resizable `NSWindow` (700×550).
+- `Sources/ClaudeTmpMonitor/SettingsView.swift` - Settings dialog with TabView containing 3 tabs: General (threshold/interval rows, history retention, disk pressure toggle + threshold, notifications toggle, launch at login toggle), File Operations (file write watchdog toggle, directory allowlist, hook status), and Blocked Commands (command watchdog toggle, blocked commands list). Hosted in a separate `NSWindow`.
 - `Sources/ClaudeTmpMonitor/AboutView.swift` - About dialog: app icon, name, version, update status, GitHub link. Hosted in a separate `NSWindow`.
+- `Sources/ClaudeTmpMonitor/WatchdogService.swift` - File write watchdog: manages Claude Code PreToolUse hook that blocks Write/Edit/Bash operations outside whitelisted directories. Two independent feature toggles: `fileOpsEnabled` (Write/Edit + destructive Bash) and `commandWatchdogEnabled` (blocked commands). `hookShouldBeInstalled` computed property returns true when either is enabled; `reconcileHookState()` installs/removes the hook accordingly. Generates bash hook script with JXA JSON parsing, patches `~/.claude/settings.local.json`, provides directory allowlist management. Migrates legacy `watchdogEnabled` key on init. Settings persisted via UserDefaults.
 
 ### Dependencies
 - SwiftUI (views, `NSHostingController` for window content)
@@ -34,12 +37,15 @@ Six-file SwiftUI app using a custom `NSStatusItem` for menubar integration.
 - AppKit (`NSStatusItem`, `NSPopover`, `NSMenu`, `NSWindow`, `NSImage` for menubar integration)
 - Combine (`combineLatest`, `sink` for reactive menubar icon updates)
 - ServiceManagement (`SMAppService` for launch-at-login)
+- CoreServices (`FSEventStream` for filesystem change notifications)
+- Charts (SwiftUI Charts framework for `AreaMark`, `LineMark`, `BarMark`, `AxisMarks` in statistics view)
 - URLSession (async `data(from:)` and `download(from:)` for GitHub API and update downloads)
 
 ### Key Subsystems
 
 #### 1. File Monitoring (MonitorService.scan)
-- Timer-based polling scans `/private/tmp/claude-*/` every N seconds (default 30)
+- **Primary: FSEvents** — watches `/private/tmp` and `~/.claude/projects/` via `FSEventStreamCreate` for near-instant detection (~2.5s worst case). Callback filters events for paths containing `/claude-` or `/.claude/projects/`, debounces with 0.5s delay, then triggers a scan. Watches `/private/tmp` (parent) because `claude-*` dirs may not exist at startup.
+- **Fallback: Timer** — polls every N seconds (default 15) as a safety net. Timer resets after every scan regardless of trigger source (FSEvents, timer, or manual).
 - Enumerates all subdirectories and files recursively via `FileManager.enumerator`
 - Resolves symlinks to get actual file sizes; detects and handles broken symlinks
 - Deduplicates by resolved path (`seenResolvedPaths: Set<String>`) to avoid double-counting
@@ -51,18 +57,33 @@ Six-file SwiftUI app using a custom `NSStatusItem` for menubar integration.
       {taskid}.output       # Symlink to .jsonl OR actual large file
 ```
 - `.output` files may be symlinks to `~/.claude/projects/.../subagents/agent-*.jsonl` or actual files that grow unbounded
+- **Growth rate tracking**: Compares file sizes across successive scans via `previousSizes: [String: (size: UInt64, time: Date)]` (keyed by resolved path). Computes `growthRate` (bytes/sec) per file; `ClaudeProject.growthRate` is the sum of its files' rates. UI shows "↑ X.X MB/min" indicators on project and file rows for actively growing files. `formatGrowthRate()` converts bytes/sec to KB/min, MB/min, or GB/min.
+- **Symlink scope visibility**: Each `MonitoredFile` has `isTargetInScope: Bool` indicating whether its symlink target is within the allowed deletion scope (`/private/tmp/claude-*` or `~/.claude/projects/`). Non-symlinks and broken symlinks are always in scope. Out-of-scope symlinks show a "link only" pill badge in the UI, indicating that deletion removes only the symlink entry, not the target file.
+- **Deduplication visibility**: After scanning all projects, `scan()` builds a global `resolvedPath → count` frequency map. Files sharing the same resolved path get `duplicateCount > 1`. The UI shows a "×N" badge in blue when multiple symlinks point to the same target, with a tooltip explaining that size is counted once.
+- **Broken symlink cleanup**: `ClaudeProject.brokenSymlinkCount` counts broken symlinks per project (shown in subtitle). `deleteBrokenSymlinks()` removes all broken symlink entries globally. `deleteBrokenSymlinksInProject(_:)` scopes cleanup to a single project. The footer shows a "Clean Broken (N)" button when broken symlinks exist.
+- **Active session detection**: `ClaudeProject.isActive` is `true` when `lastModified` is within 60 seconds of scan time (`activeSessionThreshold`) OR any file has a positive `growthRate`. The UI shows a pulsing green "live" pill badge on active projects to prevent accidental deletion of files from active Claude Code sessions. The threshold is fixed (not configurable) at 4× the default scan interval.
 
-#### 2. Status & Notifications
+#### 2. History & Statistics (HistoryService)
+- `HistoryService` records a `HistorySnapshot` after each scan via `MonitorService.onScanComplete` callback
+- **Two-tier aggregation**: raw scan-resolution snapshots kept for ≤1 hour; older data downsampled to 5-minute buckets (averaging totalSize, totalFileCount, per-project values). Steady-state: ~2,256 records, <500 KB.
+- **Persistence**: JSON-encoded to `~/Library/Application Support/com.esison.claude-tmp-monitor/history.json`. Save runs every 60s + on `applicationWillTerminate`. Load on init.
+- **Retention**: configurable 1–30 days (default 7) via `historyRetentionDays`. Pruning runs at each save.
+- **Querying**: `snapshots(for:)` filters by `TimeRange` (.oneHour, .twentyFourHours, .sevenDays, .thirtyDays); `peakSize(in:)` and `averageSize(in:)` compute stats.
+- **StatsView**: Separate 700×550 resizable `NSWindow` with dual chart rendering. **1h range**: area+line chart of total size. **24h/7d/30d ranges**: stacked `BarMark` charts with per-project color coding (12-color palette, deterministic mapping by sorted project name). Calendar-aligned bucketing (hourly for 24h, daily for 7d/30d) via `aggregateBars(from:range:)`. Hover tooltips via `.chartOverlay` + `.onContinuousHover` show date header, total size, and per-project rows sorted by size descending with color dot, name, size in MB, and percentage. `FlowLayout` legend below chart. Retention hint when 30d range selected but `historyRetentionDays < 30`.
+
+#### 3. Status & Notifications
 - Three states: Normal (green), Warning (orange), Critical (red)
 - Status determined by largest individual file size OR total size vs thresholds
 - Tracks `notifiedPaths: Set<String>` — each file triggers a system notification only once per threshold crossing
 - Menubar icon changes color to reflect current status (via Combine subscriber)
+- **Trend indicator**: `SizeTrend` enum (`.growing` ↑, `.stable` (hidden), `.shrinking` ↓) computed each scan by comparing `totalSize` to `previousTotalSize` with a 1 KB dead zone (`trendChangeThreshold`). Published as `sizeTrend` and displayed next to the size in the menubar (e.g., "42.3 MB ↑"). Arrow is suppressed when stable to reduce visual noise. Only visible when `showSizeInMenuBar` is enabled and `totalSize > 0`.
+- **Disk pressure detection**: `checkDiskPressure()` runs at the end of each scan cycle. Queries available disk space via `URL.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])` — an APFS-aware API that accounts for purgeable space. Compares against `diskPressureThresholdGB` (default: 10 GB). Publishes `diskPressureDetected` (drives orange banner in popover) and `availableDiskSpaceGB` (raw value for display). Episode-based notification dedup: fires once per transition into pressure via `diskPressureNotified` flag, resets when pressure clears. Fail-open: if volume query fails, no banner or notification. Feature toggle: `diskPressureEnabled` (default: true).
 
-#### 3. Settings / Configuration Storage
+#### 4. Settings / Configuration Storage
 ```swift
 warningThresholdMB: Int     // default: 100, range: 10...1000000
 criticalThresholdMB: Int    // default: 500, range: 50...1000000
-scanIntervalSeconds: Int    // default: 30, range: 5...300
+scanIntervalSeconds: Int    // default: 15, range: 5...300
 staleDaysThreshold: Int     // default: 7, range: 1...90
 notificationsEnabled: Bool  // default: true
 showSizeInMenuBar: Bool     // default: true
@@ -72,6 +93,13 @@ notificationsDenied: Bool   // true when system notification permission is denie
 checkForUpdatesAutomatically: Bool // default: true (in UpdateService)
 lastUpdateCheckTime: Date?  // epoch stored in UserDefaults (in UpdateService)
 dismissedUpdateVersion: String? // skip showing banner for this version (in UpdateService)
+historyRetentionDays: Int       // default: 7, range: 1...30 (in HistoryService)
+watchdogFileOpsEnabled: Bool        // default: false (in WatchdogService); migrated from legacy watchdogEnabled
+watchdogCommandWatchdogEnabled: Bool // default: false (in WatchdogService); migrated from legacy watchdogEnabled
+watchdogAllowedDirectories: [String] // default: ["~/Development"] (in WatchdogService)
+watchdogBlockedCommands: [String]    // default: ["passwd","sudo","su","shutdown","reboot","halt","poweroff","mkfs","newfs","diskutil","csrutil","nvram","dscl"] (in WatchdogService)
+diskPressureEnabled: Bool       // default: true
+diskPressureThresholdGB: Int    // default: 10, range: 1...500
 ```
 - Saved to `UserDefaults` via `@Published var` with `didSet` persistence pattern
 - Default values loaded in `MonitorService.init()` using `defaults.object(forKey:) as? Type ?? fallback`
@@ -79,16 +107,17 @@ dismissedUpdateVersion: String? // skip showing banner for this version (in Upda
 - UserDefaults keys are defined in `SettingsKey` enum (static string constants)
 - Computed properties `warningBytes` / `criticalBytes` provide pre-converted threshold values
 
-#### 4. File Deletion
+#### 5. File Deletion
 - **Path validation allowlist**: symlink targets are only deleted if the resolved path starts with `/private/tmp/claude-` or `~/.claude/projects/`. Out-of-scope targets are skipped — the symlink itself is always removed to clean up the directory entry.
 - Deleting a file: validates symlink target scope, removes target if allowed, then removes the symlink/file entry itself
 - Deleting a project: validates each symlink target, removes allowed targets, then removes the entire project directory via `removeItem(atPath:)`
 - Batch deletion: `deleteAllProjects()` deletes all projects and scans once at the end (not per-project)
+- Broken symlink cleanup: `deleteBrokenSymlinks()` removes all dangling symlink entries globally; `deleteBrokenSymlinksInProject(_:)` scopes to one project. Only removes the symlink file itself (no target exists).
 - UI uses inline confirm/cancel buttons (tracked by `DeleteConfirmation` enum in ContentView)
 - Deletion errors are surfaced via `lastDeleteError` published property, shown in the footer
 - No communication protocol — all operations are local filesystem
 
-#### 5. Auto-Update (UpdateService)
+#### 6. Auto-Update (UpdateService)
 - Periodically checks `https://api.github.com/repos/underactive/scumbag-claude/releases/latest` (default: once per day)
 - Compares remote `tag_name` (stripped of leading "v") against `CFBundleShortVersionString` using semantic version comparison
 - States: `.idle` → `.checking` → `.available(version, downloadURL, releaseNotes)` / `.upToDate` / `.error(msg)`
@@ -100,8 +129,23 @@ dismissedUpdateVersion: String? // skip showing banner for this version (in Upda
 - Users can dismiss a version (persisted as `dismissedUpdateVersion`); dismissed versions don't show the banner
 - UI: update banner in popover between projects and footer, "Check for Updates..." in right-click menu, update status in About dialog, auto-check toggle in Settings
 
+#### 7. File Write Watchdog (WatchdogService)
+- Manages a Claude Code PreToolUse hook that blocks Write/Edit/Bash operations outside user-whitelisted directories
+- **Settings**: `fileOpsEnabled` (default: false) controls Write/Edit + destructive Bash path checking; `commandWatchdogEnabled` (default: false) controls blocked command detection. Both migrate from legacy `watchdogEnabled` key on first launch. `allowedDirectories` (default: `["~/Development"]`), `blockedCommands` (default: passwd, sudo, su, shutdown, reboot, halt, poweroff, mkfs, newfs, diskutil, csrutil, nvram, dscl) — persisted via UserDefaults. The hook script's tool matcher adapts based on enabled features: `Write|Edit|Bash` when file ops is on, `Bash` only when just command watchdog is on.
+- **Hook script**: Generated bash script at `~/Library/Application Support/com.esison.claude-tmp-monitor/watchdog-hook.sh`
+  - Reads tool call JSON from stdin, parses via `osascript -l JavaScript` using `run(argv)` pattern (zero external dependencies)
+  - For Write/Edit: extracts `file_path`, resolves to absolute, checks against allowlist
+  - For Bash: first checks command against blocked commands list (e.g., `passwd`, `sudo`, `shutdown`) using position-aware regex `(^\s*|[|;&]\s*)cmd(\s|$)` — rejects regardless of directory. Then detects destructive patterns (`rm`, `rmdir`, `unlink`, `mv`, `cp`, `ln`, `tee`, `dd`, `curl -o`, `wget -O`, `>`, `>>`, `chmod`, `chown`, `chflags`, `git clean`, `git checkout --`), extracts target paths, allows `/tmp` and `/private/tmp` unconditionally, checks other paths against allowlist. Non-destructive commands always allowed.
+  - **Block**: sends macOS notification via `osascript`, logs to `watchdog.log`, exits 2 with stderr message
+  - **Allow**: exits 0 silently
+  - **Fail-open**: if JXA parsing fails, exits 0 (safety net, not sandbox)
+- **Claude settings integration**: patches `~/.claude/settings.local.json` to add/remove PreToolUse hook entry (identified by `watchdog-hook.sh` in command path). Creates file/directory if absent. Atomic writes.
+- **Hook status**: `checkHookStatus()` verifies hook is present in `settings.local.json` (detects external removal)
+- **UI**: SettingsView uses a TabView with 3 tabs — General (monitoring settings), File Operations (file ops toggle, directory allowlist with add (`NSOpenPanel`) / remove controls, green/red hook status indicator), and Blocked Commands (command watchdog toggle, blocked commands list with inline text field add / remove controls)
+- **Known limitation**: Bash parsing is best-effort — won't catch commands using variables (`rm $FILE`), subshells, or piped commands where the final target isn't visible
+
 ### Data Flow
-`MonitorService` and `UpdateService` are created and owned by `AppDelegate`. Both are passed to `ContentView` (popover), `SettingsView` (dialog), and `AboutView` (dialog) via `.environmentObject()`. All state mutations happen on `@MainActor`. Timer callbacks dispatch back to `@MainActor` via `Task`. Menubar icon/title updates are driven by a `Combine` subscriber on `monitor.$status`, `monitor.$totalSize`, and `monitor.$showSizeInMenuBar`.
+`MonitorService`, `UpdateService`, `HistoryService`, and `WatchdogService` are created and owned by `AppDelegate`. `MonitorService`, `UpdateService`, and `HistoryService` are passed to `ContentView` (popover) and `SettingsView` (dialog) via `.environmentObject()`. `WatchdogService` is passed only to `SettingsView` (its only consumer). `UpdateService` is also passed to `AboutView`. `HistoryService` is passed to `StatsView`. `MonitorService.onScanComplete` closure bridges scan results to `HistoryService.recordSnapshot()`. All state mutations happen on `@MainActor`. FSEvents callbacks dispatch to `@MainActor` via `Task`, debounce with 0.5s delay, then call `scan()`. Timer callbacks dispatch back to `@MainActor` via `Task`. Menubar icon/title updates are driven by a `Combine` subscriber on `monitor.$status`, `monitor.$totalSize`, `monitor.$showSizeInMenuBar`, and `monitor.$sizeTrend`. `HistoryService` saves to disk every 60s via its own timer, plus on `applicationWillTerminate`. `WatchdogService` manages its own hook lifecycle — enabling/disabling writes the hook script and patches Claude settings synchronously.
 
 ---
 
@@ -149,12 +193,15 @@ No external services or third-party SDKs. All operations are local filesystem an
 
 ## Known Issues / Limitations
 
-1. **No FSEvents** — Uses timer-based polling instead of FSEvents. Simpler but slightly higher latency for detecting new files.
-2. **No auto-cleanup** — Settings exist for thresholds but auto-deletion is not yet implemented.
-3. **Hardcoded skip words in `extractProjectName`** — The display name extractor has a hardcoded `skipWords` set (`Users`, `Development`, `personal`, `hardware`, `esison`) that won't work for other users.
-4. **No TOCTOU protection on delete** — Symlink targets are not re-resolved at delete time. A symlink could be retargeted between scan and delete. Deferred to separate plan.
+1. **No auto-cleanup** — Settings exist for thresholds but auto-deletion is not yet implemented.
+2. **Hardcoded skip words in `extractProjectName`** — The display name extractor has a hardcoded `skipWords` set (`Users`, `Development`, `personal`, `hardware`, `esison`) that won't work for other users.
+3. **No TOCTOU protection on delete** — Symlink targets are not re-resolved at delete time. A symlink could be retargeted between scan and delete. Deferred to separate plan.
+4. **Gatekeeper quarantine on auto-update** — Downloaded update may trigger Gatekeeper re-validation. Mitigated by `xattr -cr` in the updater script, but users may see a brief security prompt.
 5. **No delta updates** — Auto-update downloads the full zip archive every time. No binary diff/patch mechanism.
 6. **No checksum verification on updates** — Downloaded zip is not verified against a SHA256 hash. Relies on HTTPS transport security.
+7. **Watchdog Bash parsing is best-effort** — The file write watchdog catches obvious destructive patterns (`rm /path`, `mv`, `>`) but won't catch commands using variables (`rm $FILE`), subshells, or piped commands where the final target isn't visible. Designed as a safety net, not a sandbox.
+8. **Watchdog hook persists independently** — If the app is uninstalled without disabling the watchdog, the hook entry remains in `~/.claude/settings.local.json` and will cause errors on every Claude tool call (script not found). Both `fileOpsEnabled` and `commandWatchdogEnabled` persist independently in UserDefaults; the hook is installed whenever either is enabled.
+9. **Watchdog JXA latency** — `osascript -l JavaScript` invocation adds ~50-100ms to each tool call. Acceptable for a pre-execution hook but noticeable with rapid tool calls.
 
 ---
 
@@ -316,11 +363,14 @@ Version string appears in 2 files:
 | File / Directory | Purpose |
 |------------------|---------|
 | `Package.swift` | SPM package definition (macOS 13+, swift-tools-version 5.9) |
-| `Sources/ClaudeTmpMonitor/App.swift` | `@main` entry, `AppDelegate` with `NSStatusItem`, popover, right-click menu, Settings/About windows |
-| `Sources/ClaudeTmpMonitor/MonitorService.swift` | Monitoring logic, models, settings, notifications |
+| `Sources/ClaudeTmpMonitor/App.swift` | `@main` entry, `AppDelegate` with `NSStatusItem`, popover, right-click menu, Settings/About/Statistics windows |
+| `Sources/ClaudeTmpMonitor/MonitorService.swift` | Monitoring logic, models, settings, notifications, `onScanComplete` callback |
+| `Sources/ClaudeTmpMonitor/HistoryService.swift` | Historical data: snapshot recording, two-tier aggregation, JSON persistence, retention, querying |
 | `Sources/ClaudeTmpMonitor/UpdateService.swift` | Auto-update: GitHub releases API check, download, self-replacement |
-| `Sources/ClaudeTmpMonitor/ContentView.swift` | Main popover view (header, status, projects, update banner, footer) |
-| `Sources/ClaudeTmpMonitor/SettingsView.swift` | Settings dialog view |
+| `Sources/ClaudeTmpMonitor/ContentView.swift` | Main popover view (header, status, search/filter + sort, projects, update banner, footer with Stats button) |
+| `Sources/ClaudeTmpMonitor/StatsView.swift` | Statistics window: SwiftUI Charts area+line chart, time range picker, summary stats |
+| `Sources/ClaudeTmpMonitor/SettingsView.swift` | Settings dialog view with 3-tab TabView (General, File Operations, Blocked Commands) |
+| `Sources/ClaudeTmpMonitor/WatchdogService.swift` | File write watchdog: PreToolUse hook management, script generation, Claude settings patching |
 | `Sources/ClaudeTmpMonitor/AboutView.swift` | About dialog view |
 | `Sources/ClaudeTmpMonitor/Resources/` | `MenuBarIcon.png`, `MenuBarIcon@2x.png`, `AppIcon.icns` |
 | `Info.plist` | App bundle config (`LSUIElement=true`, bundle ID `com.esison.claude-tmp-monitor`) |

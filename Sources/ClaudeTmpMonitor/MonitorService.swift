@@ -1,3 +1,4 @@
+import CoreServices
 import Foundation
 import ServiceManagement
 import UserNotifications
@@ -14,6 +15,14 @@ enum SettingsKey {
     static let checkForUpdatesAutomatically = "checkForUpdatesAutomatically"
     static let lastUpdateCheckTime = "lastUpdateCheckTime"
     static let dismissedUpdateVersion = "dismissedUpdateVersion"
+    static let historyRetentionDays = "historyRetentionDays"
+    static let watchdogEnabled = "watchdogEnabled"  // Legacy: migration only
+    static let watchdogFileOpsEnabled = "watchdogFileOpsEnabled"
+    static let watchdogCommandWatchdogEnabled = "watchdogCommandWatchdogEnabled"
+    static let watchdogAllowedDirectories = "watchdogAllowedDirectories"
+    static let watchdogBlockedCommands = "watchdogBlockedCommands"
+    static let diskPressureEnabled = "diskPressureEnabled"
+    static let diskPressureThresholdGB = "diskPressureThresholdGB"
 }
 
 // MARK: - Models
@@ -24,9 +33,12 @@ struct MonitoredFile: Identifiable {
     let resolvedPath: String
     let isSymlink: Bool
     let isBrokenSymlink: Bool
+    let isTargetInScope: Bool // symlink target is safe to fully delete (within allowed paths)
     let size: UInt64
     let lastModified: Date
     let name: String
+    let growthRate: Double? // bytes per second, nil when not growing or no prior data
+    let duplicateCount: Int // how many files share the same resolvedPath (1 = unique)
 }
 
 struct ClaudeProject: Identifiable {
@@ -38,13 +50,36 @@ struct ClaudeProject: Identifiable {
     let files: [MonitoredFile]
     let lastModified: Date
     let isStale: Bool
+    /// True when the project was modified within the last 60 seconds, or any file is actively growing.
+    let isActive: Bool
     let claudeDir: String
+
+    var growthRate: Double {
+        files.compactMap(\.growthRate).reduce(0, +)
+    }
+
+    var brokenSymlinkCount: Int {
+        files.filter(\.isBrokenSymlink).count
+    }
 }
 
 enum MonitorStatus: String {
     case normal = "Normal"
     case warning = "Warning"
     case critical = "Critical"
+}
+
+/// Direction of total monitored size change between consecutive scans (1 KB dead zone).
+enum SizeTrend {
+    case growing, stable, shrinking
+
+    var indicator: String {
+        switch self {
+        case .growing: return "↑"
+        case .stable: return ""
+        case .shrinking: return "↓"
+        }
+    }
 }
 
 // MARK: - Monitor Service
@@ -56,9 +91,32 @@ class MonitorService: ObservableObject {
     @Published var totalFileCount: Int = 0
     @Published var status: MonitorStatus = .normal
     @Published var lastScanTime: Date?
+    @Published var nextScanTime: Date?
     @Published var isScanning = false
+    @Published var sizeTrend: SizeTrend = .stable
     @Published var lastDeleteError: String?
     @Published var notificationsDenied: Bool = false
+
+    // Disk pressure
+    @Published var diskPressureDetected: Bool = false
+    @Published var availableDiskSpaceGB: Double? = nil
+    @Published var diskPressureEnabled: Bool {
+        didSet {
+            UserDefaults.standard.set(diskPressureEnabled, forKey: SettingsKey.diskPressureEnabled)
+            if !diskPressureEnabled {
+                diskPressureDetected = false
+                availableDiskSpaceGB = nil
+                diskPressureNotified = false
+            }
+        }
+    }
+    @Published var diskPressureThresholdGB: Int {
+        didSet {
+            let clamped = min(max(diskPressureThresholdGB, 1), 500)
+            if diskPressureThresholdGB != clamped { diskPressureThresholdGB = clamped; return }
+            UserDefaults.standard.set(diskPressureThresholdGB, forKey: SettingsKey.diskPressureThresholdGB)
+        }
+    }
 
     // Settings
     @Published var warningThresholdMB: Int {
@@ -117,8 +175,19 @@ class MonitorService: ObservableObject {
     var warningBytes: UInt64 { UInt64(clamping: warningThresholdMB) * 1024 * 1024 }
     var criticalBytes: UInt64 { UInt64(clamping: criticalThresholdMB) * 1024 * 1024 }
 
+    /// Called synchronously on @MainActor at the end of each scan() with the updated totals and projects.
+    /// Callers must not trigger another scan() from within this closure (isScanning guard would silently no-op).
+    var onScanComplete: ((UInt64, Int, [ClaudeProject]) -> Void)?
+
     private var timer: Timer?
+    private var eventStream: FSEventStreamRef?
+    private var debouncedScanTask: Task<Void, Never>?
+    private static let trendChangeThreshold: UInt64 = 1024 // 1 KB dead zone to filter noise
+    private static let activeSessionThreshold: TimeInterval = 60 // seconds; project is "live" if modified more recently
+    private var previousSizes: [String: (size: UInt64, time: Date)] = [:]
+    private var previousTotalSize: UInt64?
     private var notifiedPaths: Set<String> = []
+    private var diskPressureNotified: Bool = false
     private var isUpdatingLaunchAtLogin = false
 
     init() {
@@ -130,7 +199,7 @@ class MonitorService: ObservableObject {
         let rawCritical = defaults.object(forKey: SettingsKey.criticalThresholdMB) as? Int ?? 500
         self.criticalThresholdMB = min(max(rawCritical, 50), 1000000)
 
-        let rawInterval = defaults.object(forKey: SettingsKey.scanIntervalSeconds) as? Int ?? 30
+        let rawInterval = defaults.object(forKey: SettingsKey.scanIntervalSeconds) as? Int ?? 15
         self.scanIntervalSeconds = min(max(rawInterval, 5), 300)
 
         let rawStale = defaults.object(forKey: SettingsKey.staleDaysThreshold) as? Int ?? 7
@@ -140,9 +209,14 @@ class MonitorService: ObservableObject {
         self.showSizeInMenuBar = defaults.object(forKey: SettingsKey.showSizeInMenuBar) as? Bool ?? true
         self.launchAtLogin = SMAppService.mainApp.status == .enabled
 
+        self.diskPressureEnabled = defaults.object(forKey: SettingsKey.diskPressureEnabled) as? Bool ?? true
+        let rawDiskThreshold = defaults.object(forKey: SettingsKey.diskPressureThresholdGB) as? Int ?? 10
+        self.diskPressureThresholdGB = min(max(rawDiskThreshold, 1), 500)
+
         requestNotificationPermission()
         checkNotificationAuthorization()
         startTimer()
+        startFSEvents()
 
         Task { @MainActor in
             self.scan()
@@ -150,6 +224,14 @@ class MonitorService: ObservableObject {
     }
 
     deinit {
+        // Inlined (can't call @MainActor stopFSEvents() from nonisolated deinit)
+        if let stream = eventStream {
+            FSEventStreamStop(stream)
+            FSEventStreamInvalidate(stream)
+            FSEventStreamRelease(stream)
+            eventStream = nil
+        }
+        debouncedScanTask?.cancel()
         timer?.invalidate()
     }
 
@@ -246,6 +328,86 @@ class MonitorService: ObservableObject {
         scan()
     }
 
+    func deleteFiles(_ files: [MonitoredFile]) {
+        guard !files.isEmpty else { return }
+        lastDeleteError = nil
+        let fm = FileManager.default
+        var errors: [String] = []
+        var deletedTargets = Set<String>()
+        for file in files {
+            if file.isSymlink && !file.isBrokenSymlink {
+                if isInAllowedDeletionScope(file.resolvedPath) && !deletedTargets.contains(file.resolvedPath) {
+                    do {
+                        try fm.removeItem(atPath: file.resolvedPath)
+                        deletedTargets.insert(file.resolvedPath)
+                    } catch {
+                        errors.append("target of \(file.name): \(error.localizedDescription)")
+                    }
+                }
+            }
+            do {
+                try fm.removeItem(atPath: file.path)
+            } catch {
+                errors.append("\(file.name): \(error.localizedDescription)")
+            }
+            notifiedPaths.remove(file.path)
+        }
+        if !errors.isEmpty {
+            lastDeleteError = "Failed to delete: \(errors.joined(separator: ", "))"
+        }
+        scan()
+    }
+
+    func deleteBrokenSymlinks() {
+        lastDeleteError = nil
+        let fm = FileManager.default
+        var errorCount = 0
+        for project in projects {
+            for file in project.files where file.isBrokenSymlink {
+                // Re-verify the entry is still a broken symlink before deleting (TOCTOU guard)
+                let attrs = try? fm.attributesOfItem(atPath: file.path)
+                let isStillSymlink = (attrs?[.type] as? FileAttributeType) == .typeSymbolicLink
+                let targetExists = fm.fileExists(atPath: file.resolvedPath)
+                guard isStillSymlink && !targetExists else { continue }
+
+                do {
+                    try fm.removeItem(atPath: file.path)
+                    notifiedPaths.remove(file.path)
+                } catch {
+                    errorCount += 1
+                }
+            }
+        }
+        if errorCount > 0 {
+            lastDeleteError = "Failed to remove \(errorCount) broken symlink\(errorCount == 1 ? "" : "s")"
+        }
+        scan()
+    }
+
+    func deleteBrokenSymlinksInProject(_ project: ClaudeProject) {
+        lastDeleteError = nil
+        let fm = FileManager.default
+        var errorCount = 0
+        for file in project.files where file.isBrokenSymlink {
+            // Re-verify the entry is still a broken symlink before deleting (TOCTOU guard)
+            let attrs = try? fm.attributesOfItem(atPath: file.path)
+            let isStillSymlink = (attrs?[.type] as? FileAttributeType) == .typeSymbolicLink
+            let targetExists = fm.fileExists(atPath: file.resolvedPath)
+            guard isStillSymlink && !targetExists else { continue }
+
+            do {
+                try fm.removeItem(atPath: file.path)
+                notifiedPaths.remove(file.path)
+            } catch {
+                errorCount += 1
+            }
+        }
+        if errorCount > 0 {
+            lastDeleteError = "Failed to remove \(errorCount) broken symlink\(errorCount == 1 ? "" : "s") in \(project.displayName)"
+        }
+        scan()
+    }
+
     // MARK: - Path Validation
 
     private func isClaudeTmpPath(_ path: String) -> Bool {
@@ -263,6 +425,7 @@ class MonitorService: ObservableObject {
     private func startTimer() {
         timer?.invalidate()
         let interval = TimeInterval(scanIntervalSeconds)
+        nextScanTime = Date().addingTimeInterval(interval)
         let newTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.scan()
@@ -276,6 +439,69 @@ class MonitorService: ObservableObject {
         startTimer()
     }
 
+    private func startFSEvents() {
+        let claudeProjectsPath = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".claude/projects").path
+        let watchedPaths = ["/private/tmp", claudeProjectsPath] as CFArray
+
+        // passUnretained is safe: MonitorService is a singleton owned by AppDelegate
+        // for the entire app lifetime. The stream is always stopped before dealloc (deinit).
+        var context = FSEventStreamContext(
+            version: 0,
+            info: Unmanaged.passUnretained(self).toOpaque(),
+            retain: nil,
+            release: nil,
+            copyDescription: nil
+        )
+
+        let callback: FSEventStreamCallback = { _, info, _, eventPaths, _, _ in
+            guard let info = info else { return }
+            let monitor = Unmanaged<MonitorService>.fromOpaque(info).takeUnretainedValue()
+
+            guard let paths = Unmanaged<CFArray>.fromOpaque(eventPaths).takeUnretainedValue() as? [String] else { return }
+            let relevant = paths.contains { $0.contains("/claude-") || $0.contains("/.claude/projects/") }
+            guard relevant else { return }
+
+            Task { @MainActor in
+                monitor.scheduleDebouncedScan()
+            }
+        }
+
+        // NoDefer: first event after a quiet period delivers immediately; subsequent
+        // events still coalesce within the 2.0s latency window. Combined with the 0.5s
+        // debounce in scheduleDebouncedScan(), worst-case detection latency is ~2.5s.
+        guard let stream = FSEventStreamCreate(
+            nil,
+            callback,
+            &context,
+            watchedPaths,
+            FSEventsGetCurrentEventId(),
+            2.0,
+            UInt32(kFSEventStreamCreateFlagUseCFTypes | kFSEventStreamCreateFlagNoDefer)
+        ) else { return }
+
+        FSEventStreamSetDispatchQueue(stream, DispatchQueue.main)
+        FSEventStreamStart(stream)
+        eventStream = stream
+    }
+
+    private func stopFSEvents() {
+        guard let stream = eventStream else { return }
+        FSEventStreamStop(stream)
+        FSEventStreamInvalidate(stream)
+        FSEventStreamRelease(stream)
+        eventStream = nil
+    }
+
+    private func scheduleDebouncedScan() {
+        debouncedScanTask?.cancel()
+        debouncedScanTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 500_000_000) // 0.5s debounce
+            guard !Task.isCancelled else { return }
+            self?.scan()
+        }
+    }
+
     private func scan() {
         guard !isScanning else { return }
         isScanning = true
@@ -283,6 +509,7 @@ class MonitorService: ObservableObject {
 
         let fm = FileManager.default
         let tmpDir = "/private/tmp"
+        let scanTime = Date()
         var foundProjects: [ClaudeProject] = []
         var currentPaths: Set<String> = []
 
@@ -304,14 +531,42 @@ class MonitorService: ObservableObject {
                 let projectPath = "\(claudePath)/\(projectDir)"
                 guard fm.fileExists(atPath: projectPath, isDirectory: &isDir), isDir.boolValue else { continue }
 
-                let (files, projectTotalSize) = scanDirectory(projectPath, fm: fm)
-                guard !files.isEmpty else { continue }
+                let (rawFiles, projectTotalSize) = scanDirectory(projectPath, fm: fm)
+                guard !rawFiles.isEmpty else { continue }
+
+                // Compute growth rates by comparing to previous scan
+                let files = rawFiles.map { file -> MonitoredFile in
+                    var rate: Double? = nil
+                    if let prev = previousSizes[file.resolvedPath] {
+                        let delta = Double(file.size) - Double(prev.size)
+                        if delta > 0 {
+                            let timeDelta = scanTime.timeIntervalSince(prev.time)
+                            if timeDelta > 0 {
+                                rate = delta / timeDelta
+                            }
+                        }
+                    }
+                    return MonitoredFile(
+                        path: file.path,
+                        resolvedPath: file.resolvedPath,
+                        isSymlink: file.isSymlink,
+                        isBrokenSymlink: file.isBrokenSymlink,
+                        isTargetInScope: file.isTargetInScope,
+                        size: file.size,
+                        lastModified: file.lastModified,
+                        name: file.name,
+                        growthRate: rate,
+                        duplicateCount: 1
+                    )
+                }
 
                 for file in files { currentPaths.insert(file.path) }
 
                 let lastMod = files.map(\.lastModified).max() ?? Date.distantPast
                 let staleThreshold = TimeInterval(staleDaysThreshold * 86400)
                 let isStale = Date().timeIntervalSince(lastMod) > staleThreshold
+                let isActive = scanTime.timeIntervalSince(lastMod) < Self.activeSessionThreshold
+                    || files.contains(where: { ($0.growthRate ?? 0) > 0 })
 
                 let project = ClaudeProject(
                     path: projectPath,
@@ -321,21 +576,96 @@ class MonitorService: ObservableObject {
                     files: files.sorted { $0.size > $1.size },
                     lastModified: lastMod,
                     isStale: isStale,
+                    isActive: isActive,
                     claudeDir: claudeDir
                 )
                 foundProjects.append(project)
             }
         }
 
+        // Compute cross-project duplicate counts (files sharing the same resolved path)
+        var resolvedPathCounts: [String: Int] = [:]
+        for project in foundProjects {
+            for file in project.files where !file.isBrokenSymlink {
+                resolvedPathCounts[file.resolvedPath, default: 0] += 1
+            }
+        }
+        let hasDuplicates = resolvedPathCounts.values.contains { $0 > 1 }
+        // Rebuild projects with cross-project duplicate counts (keep in sync with ClaudeProject init above)
+        if hasDuplicates {
+            foundProjects = foundProjects.map { project in
+                ClaudeProject(
+                    path: project.path,
+                    name: project.name,
+                    displayName: project.displayName,
+                    totalSize: project.totalSize,
+                    files: project.files.map { file in
+                        let count = file.isBrokenSymlink ? 1 : (resolvedPathCounts[file.resolvedPath] ?? 1)
+                        guard count != file.duplicateCount else { return file }
+                        return MonitoredFile(
+                            path: file.path,
+                            resolvedPath: file.resolvedPath,
+                            isSymlink: file.isSymlink,
+                            isBrokenSymlink: file.isBrokenSymlink,
+                            isTargetInScope: file.isTargetInScope,
+                            size: file.size,
+                            lastModified: file.lastModified,
+                            name: file.name,
+                            growthRate: file.growthRate,
+                            duplicateCount: count
+                        )
+                    },
+                    lastModified: project.lastModified,
+                    isStale: project.isStale,
+                    isActive: project.isActive,
+                    claudeDir: project.claudeDir
+                )
+            }
+        }
+
         projects = foundProjects.sorted { $0.totalSize > $1.totalSize }
         totalSize = projects.reduce(0) { $0 + $1.totalSize }
         totalFileCount = projects.reduce(0) { $0 + $1.files.count }
-        lastScanTime = Date()
+        lastScanTime = scanTime
+
+        // Compute menubar trend indicator by comparing to previous scan
+        if let prev = previousTotalSize {
+            if totalSize > prev + Self.trendChangeThreshold {
+                sizeTrend = .growing
+            } else if prev > totalSize + Self.trendChangeThreshold {
+                sizeTrend = .shrinking
+            } else {
+                sizeTrend = .stable
+            }
+        }
+        previousTotalSize = totalSize
+
+        // Rebuild previousSizes from current scan (implicitly prunes stale entries).
+        // Carry forward the previous timestamp when size hasn't changed, so that
+        // growth rates after idle periods reflect actual growth duration, not idle time.
+        var newPreviousSizes: [String: (size: UInt64, time: Date)] = [:]
+        for project in projects {
+            for file in project.files {
+                if let prev = previousSizes[file.resolvedPath], prev.size == file.size {
+                    newPreviousSizes[file.resolvedPath] = prev
+                } else {
+                    newPreviousSizes[file.resolvedPath] = (file.size, scanTime)
+                }
+            }
+        }
+        previousSizes = newPreviousSizes
 
         // Prune notifiedPaths to only contain paths that still exist
         notifiedPaths.formIntersection(currentPaths)
 
         updateStatus()
+        checkDiskPressure()
+
+        // Notify history service (or any other listener) of scan results
+        onScanComplete?(totalSize, totalFileCount, projects)
+
+        // Reset fallback timer after every scan (regardless of trigger source)
+        restartTimer()
     }
 
     private func resolveRealPath(_ path: String) throws -> String {
@@ -389,14 +719,21 @@ class MonitorService: ObservableObject {
                 }
             }
 
+            // Non-symlinks are always in scope (they live in /private/tmp/claude-*).
+            // Broken symlinks have no target — removing the dangling entry is always safe.
+            let targetInScope = !isSymlink || isBrokenSymlink || isInAllowedDeletionScope(resolvedPath)
+
             let file = MonitoredFile(
                 path: fullPath,
                 resolvedPath: resolvedPath,
                 isSymlink: isSymlink,
                 isBrokenSymlink: isBrokenSymlink,
+                isTargetInScope: targetInScope,
                 size: fileSize,
                 lastModified: modDate,
-                name: (fullPath as NSString).lastPathComponent
+                name: (fullPath as NSString).lastPathComponent,
+                growthRate: nil,
+                duplicateCount: 1
             )
             files.append(file)
 
@@ -408,6 +745,44 @@ class MonitorService: ObservableObject {
         }
 
         return (files, totalSize)
+    }
+
+    private func checkDiskPressure() {
+        guard diskPressureEnabled else {
+            diskPressureDetected = false
+            availableDiskSpaceGB = nil
+            diskPressureNotified = false
+            return
+        }
+
+        let homeURL = FileManager.default.homeDirectoryForCurrentUser
+        guard let values = try? homeURL.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]),
+              let availableBytes = values.volumeAvailableCapacityForImportantUsage else {
+            // Fail-open: can't read disk space, don't raise a false alarm
+            diskPressureDetected = false
+            availableDiskSpaceGB = nil
+            return
+        }
+
+        let availableGB = Double(availableBytes) / (1024 * 1024 * 1024)
+        availableDiskSpaceGB = availableGB
+        let underPressure = availableGB < Double(diskPressureThresholdGB)
+
+        if underPressure && !diskPressureDetected {
+            // Transition INTO pressure
+            diskPressureDetected = true
+            if !diskPressureNotified && notificationsEnabled {
+                diskPressureNotified = true
+                sendNotification(
+                    title: "Low Disk Space",
+                    body: String(format: "%.1f GB free — %@ used by Claude tmp files", availableGB, formatBytes(totalSize))
+                )
+            }
+        } else if !underPressure && diskPressureDetected {
+            // Transition OUT of pressure
+            diskPressureDetected = false
+            diskPressureNotified = false
+        }
     }
 
     private func updateStatus() {
@@ -495,8 +870,35 @@ class MonitorService: ObservableObject {
     }
 }
 
-// MARK: - Byte Formatting
+// MARK: - Formatting Helpers
+
+private let _relativeTimeDateFormatter: DateFormatter = {
+    let f = DateFormatter()
+    f.dateFormat = "MMM d"
+    return f
+}()
+
+func relativeTime(_ date: Date) -> String {
+    let seconds = -date.timeIntervalSinceNow
+    guard seconds > 0 else { return "now" }
+    if seconds < 60 { return "now" }
+    if seconds < 3600 { return "\(Int(seconds / 60))m" }
+    if seconds < 86400 { return "\(Int(seconds / 3600))h" }
+    if seconds < 604800 { return "\(Int(seconds / 86400))d" } // 7 days
+    return _relativeTimeDateFormatter.string(from: date)
+}
 
 func formatBytes(_ bytes: UInt64) -> String {
     ByteCountFormatter.string(fromByteCount: Int64(clamping: bytes), countStyle: .file)
+}
+
+func formatGrowthRate(_ bytesPerSecond: Double) -> String? {
+    guard bytesPerSecond.isFinite, bytesPerSecond > 0 else { return nil }
+    let bytesPerMinute = bytesPerSecond * 60
+    guard bytesPerMinute >= 1024 else { return nil } // suppress sub-1 KB/min noise
+    let formatted = ByteCountFormatter.string(
+        fromByteCount: Int64(clamping: Int(bytesPerMinute)),
+        countStyle: .file
+    )
+    return "\(formatted)/min"
 }

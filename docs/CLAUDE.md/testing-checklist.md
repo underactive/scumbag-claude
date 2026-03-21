@@ -114,8 +114,250 @@
 - [ ] Running from dev build (swift run) shows "update manually" error instead of attempting install
 - [ ] Install flow: app terminates, shell script replaces bundle, clears quarantine, relaunches
 
+## FSEvents Detection
+- [ ] Creating a new file in `/private/tmp/claude-*/` is detected within ~3 seconds (vs 15s poll)
+- [ ] Deleting a file from `/private/tmp/claude-*/` is reflected in the popover within ~3 seconds
+- [ ] File size growth at symlink targets in `~/.claude/projects/` triggers a scan within ~3 seconds
+- [ ] Pie chart timer resets after an FSEvents-triggered scan
+- [ ] Fallback timer still fires on schedule when no filesystem changes occur
+- [ ] Manual refresh (Cmd+R) still works alongside FSEvents monitoring
+
+## Menubar Trend Indicator
+- [ ] First scan shows no trend arrow next to size in menubar (no prior data, defaults to stable)
+- [ ] When total file size increases between scans, menubar shows ↑ next to size
+- [ ] When total file size decreases between scans (e.g., after deleting files), menubar shows ↓ next to size
+- [ ] When total file size stays the same between scans, no trend arrow is shown (stable = hidden)
+- [ ] Trend arrow is not shown when "Show size in menu bar" is disabled
+- [ ] Trend arrow is not shown when total size is 0 (no files)
+- [ ] Changes smaller than 1 KB do not flip the arrow (dead zone)
+- [ ] Change of exactly 1024 bytes shows no arrow (stable, boundary test)
+
+## Growth Rate Tracking
+- [ ] First scan shows no growth rate indicators (no prior data)
+- [ ] Second scan shows "↑ X.X MB/min" on project row when files grew between scans
+- [ ] Second scan shows "↑ X.X MB/min" on individual file rows for growing files
+- [ ] Growth indicator disappears when a file stops growing (same size across scans)
+- [ ] Project growth rate is the sum of its individual file growth rates
+- [ ] Growth rate units scale appropriately (KB/min, MB/min, GB/min)
+
+## Symlink Scope Indicators
+- [ ] Symlinks with in-scope targets (under /private/tmp/claude-* or ~/.claude/projects/) show normal "→ filename" subtitle
+- [ ] Symlinks with out-of-scope targets show "link only" purple pill badge next to the arrow subtitle
+- [ ] Non-symlink files do not show any scope indicator
+- [ ] Broken symlinks do not show a scope indicator (they show "broken symlink" in red instead)
+
+## Deduplication Visibility
+- [ ] Files with unique resolved paths show no duplicate badge
+- [ ] When multiple symlinks point to the same resolved file, each shows a blue "×N" badge next to the filename
+- [ ] Hovering the "×N" badge shows a tooltip explaining that size is counted once
+- [ ] Broken symlinks are excluded from duplicate counting
+
+## Broken Symlink Cleanup
+- [ ] Project subtitle shows "N broken" count in red when project has broken symlinks
+- [ ] Project subtitle omits broken count when project has no broken symlinks
+- [ ] "Clean Broken (N)" button appears in footer when broken symlinks exist globally
+- [ ] "Clean Broken (N)" button does not appear when no broken symlinks exist
+- [ ] Clicking "Clean Broken" shows Cancel/Confirm buttons
+- [ ] Confirming removes all broken symlinks across all projects
+- [ ] After cleanup, broken count updates and button disappears if no broken symlinks remain
+- [ ] Cleanup errors are shown in the footer as red text
+
+## Statistics Window
+- [ ] "Stats" button in footer opens the Statistics window
+- [ ] "Statistics" in right-click menu opens the Statistics window
+- [ ] Statistics window reuses existing window if already open
+- [ ] Statistics window is resizable
+- [ ] Time range picker switches between 1h, 24h, and 7d views
+- [ ] Current/Peak/Average summary values update when range changes
+- [ ] Chart shows area + line visualization of total size over time
+- [ ] X-axis shows HH:mm for 1h and 24h ranges, abbreviated weekday for 7d
+- [ ] Y-axis shows formatted byte values (KB, MB, GB)
+- [ ] Empty state message appears when fewer than 2 data points exist
+- [ ] After 2+ scans, chart populates with data points
+- [ ] Data persists in `~/Library/Application Support/com.esison.claude-tmp-monitor/history.json`
+- [ ] Quitting and relaunching preserves historical data in the chart
+- [ ] Deleting history.json and relaunching shows empty state
+- [ ] "History retention" setting in Settings accepts values between 1-30 days
+- [ ] History retention setting persists after closing and reopening Settings
+- [ ] Data older than retention period is pruned on save
+- [ ] Changing retention to 1 day while 7 days of data is loaded prunes old data on the next save
+- [ ] Data older than 1 hour is visibly coarser resolution (aggregated into 5-minute buckets)
+- [ ] Statistics window chart and time range picker are accessible via VoiceOver
+- [ ] Time range picker shows 4 segments: 1h, 24h, 7d, 30d (no clipping)
+- [ ] 1h range shows area+line chart (no regression from previous behavior)
+- [ ] 24h range shows stacked bar chart with hourly bars, color-coded by project
+- [ ] 7d range shows stacked bar chart with daily bars, color-coded by project
+- [ ] 30d range shows stacked bar chart with daily bars, color-coded by project
+- [ ] Hovering over a bar shows tooltip with date header, total size, and per-project rows (color dot, name, size, percentage)
+- [ ] Tooltip per-project rows are sorted by size descending
+- [ ] Moving mouse away from bars hides the tooltip
+- [ ] Tooltip stays within chart bounds (doesn't clip off edges)
+- [ ] Color legend below chart shows all project names with matching color dots
+- [ ] Legend wraps to multiple lines when there are many projects
+- [ ] Project colors are consistent across all bars in a single view
+- [ ] When 30d range is selected and history retention is <30 days, a hint message appears below the chart
+- [ ] When 30d range is selected and history retention is 30 days, no hint message appears
+- [ ] Summary row (Current/Peak/Average) works correctly for the 30d range
+- [ ] Empty state appears for 30d range when fewer than 2 data points exist
+- [ ] Statistics window is 700×550 (enlarged from previous 600×450)
+- [ ] Tooltip stays correctly positioned when window is resized wider or narrower than default 700px
+- [ ] When more than 12 projects exist, colors repeat and legend/tooltip still render correctly
+- [ ] Bar chart correctly represents project sizes when a project exists in some hours/days but not others (sparse presence)
+- [ ] Statistics chart renders correctly across daylight saving time transitions
+- [ ] Tooltip works when chart has only a single bar (e.g., 24h range with all data in one hour)
+- [ ] "Current" in summary row shows latest snapshot value regardless of selected time range; "Peak"/"Average" are range-scoped
+- [ ] Stacked bar chart, tooltip, and legend are navigable via VoiceOver
+
+## File Write Watchdog
+- [ ] "File Operations" and "Blocked Commands" tabs appear in the Settings window TabView
+- [ ] Toggling watchdog on installs hook script and patches `~/.claude/settings.local.json`
+- [ ] Toggling watchdog off removes hook entry from `settings.local.json` and deletes script
+- [ ] Allowed directories list shows default "~/Development" entry
+- [ ] "Add Directory" button opens folder picker, selected folder appears in list
+- [ ] Remove (−) button removes the directory from the list
+- [ ] Adding/removing directories regenerates the hook script with updated paths
+- [ ] Status indicator shows green "Hook installed" when hook is present in settings
+- [ ] Status indicator shows red "Hook not found" when hook is missing
+- [ ] Hook blocks Write tool targeting a file outside allowed directories (exit code 2)
+- [ ] Hook allows Write tool targeting a file inside allowed directories (exit code 0)
+- [ ] Hook blocks Edit tool targeting a file outside allowed directories
+- [ ] Hook allows Edit tool targeting a file inside allowed directories
+- [ ] Hook blocks Bash `rm` targeting a file outside allowed directories and /tmp
+- [ ] Hook allows Bash `rm` targeting /tmp or /private/tmp
+- [ ] Hook allows non-destructive Bash commands (ls, cat, echo) regardless of path
+- [ ] Blocked operations trigger a macOS notification with "Scumbag Claude Watchdog" title
+- [ ] Blocked operations are logged to `~/Library/Application Support/com.esison.claude-tmp-monitor/watchdog.log`
+- [ ] If JXA parsing fails (malformed input), hook allows the operation (fail-open)
+- [ ] Watchdog enabled state persists after app relaunch
+- [ ] Allowed directories list persists after app relaunch
+- [ ] Settings window height accommodates the watchdog section without overflow
+- [ ] Removing all directories from the allowlist causes all Write/Edit operations to be blocked
+- [ ] Pre-existing hooks in `settings.local.json` are preserved after watchdog install/uninstall
+- [ ] Enabling watchdog when `~/.claude` directory does not exist creates the directory
+- [ ] If `settings.local.json` contains invalid JSON, watchdog shows error and does not overwrite
+- [ ] Hook blocks Write with path traversal (`../`) targeting outside allowed directories
+- [ ] Directory with name prefix matching allowed dir (e.g. `/DevelopmentEvil`) is blocked
+
+## Blocked Commands (Watchdog)
+- [ ] Default blocked commands list contains: passwd, sudo, su, shutdown, reboot, halt, poweroff, mkfs, newfs, diskutil, csrutil, nvram, dscl
+- [ ] Hook blocks `passwd root` (command at start of line) with exit code 2
+- [ ] Hook blocks `echo foo | sudo tee /etc/thing` (sudo after pipe) with exit code 2
+- [ ] Hook blocks `cmd1 && sudo cmd2` (sudo after &&) with exit code 2
+- [ ] Hook allows `cat /etc/passwd` (passwd in a path argument, not as a command) with exit code 0
+- [ ] Blocked command triggers macOS notification with "Command blocked: <cmd>" message
+- [ ] Blocked command is logged to watchdog.log with BLOCKED_CMD prefix
+- [ ] Adding a command via Settings text field appends it to the list and regenerates hook script
+- [ ] Removing a command via minus button removes it from the list and regenerates hook script
+- [ ] Duplicate commands are not added (addBlockedCommand deduplicates)
+- [ ] Empty/whitespace-only command names cannot be added (Add button is disabled)
+- [ ] Blocked commands list persists after app relaunch
+- [ ] Settings window height accommodates both directory list and blocked commands list
+- [ ] Hook blocks `cmd1; sudo cmd2` (sudo after semicolon) with exit code 2
+- [ ] Hook blocks `  sudo rm -rf /` (command with leading whitespace) with exit code 2
+- [ ] Hook blocks `sudo` at end of line with no arguments (e.g., `echo | sudo`) with exit code 2
+- [ ] Hook allows `echo shutdown` (blocked command as argument, not at command position) with exit code 0
+- [ ] Removing all blocked commands results in an empty list and no commands are blocked
+- [ ] Modifying blocked commands while watchdog is disabled takes effect when subsequently enabled
+- [ ] Blocked commands list and add field are hidden when the Blocked Commands tab toggle is off
+- [ ] Pressing Enter in blocked command text field adds the command
+
+## Project Search & Sort
+- [ ] Search field appears between status bar and project list when projects exist
+- [ ] Search field is hidden when no projects exist
+- [ ] Typing in search field filters projects by display name (case-insensitive)
+- [ ] Clearing search field (via X button) restores all projects
+- [ ] "No matching projects" message shown when search has no results (distinct from "No Claude tmp directories found")
+- [ ] Sort menu shows Size, Name, Date options with checkmark on active selection
+- [ ] Sort by Size orders projects largest-first (default behavior)
+- [ ] Sort by Name orders projects alphabetically (case-insensitive)
+- [ ] Sort by Date orders projects most-recently-modified first
+- [ ] Switching sort order reorders files within expanded projects
+- [ ] Clean All still operates on all projects regardless of active search filter
+- [ ] Clean Broken still counts across all projects regardless of active search filter
+- [ ] Popover height adjusts correctly with search bar present
+- [ ] Search query resets when popover is closed and reopened
+- [ ] Sort order persists within a session (across popover open/close) but resets on app restart
+- [ ] Delete confirmation on a project is cleared when typing in the search field
+
+## File Timestamps
+- [ ] File rows show relative timestamp next to size (e.g., "2m", "3h", "2d")
+- [ ] Project subtitle shows relative modification time after claudeDir
+- [ ] Timestamps update after each scan
+- [ ] Broken symlinks do not show a timestamp (they have no valid modification date)
+- [ ] Files older than 7 days show "MMM d" format (e.g., "Mar 15")
+
+## Batch File Delete
+- [ ] Selection circles appear on every file row (left side, before file icon)
+- [ ] Clicking a selection circle toggles it between empty and filled
+- [ ] "Delete (N)" button appears in footer when files are selected
+- [ ] Clicking "Delete (N)" shows Confirm/Cancel buttons
+- [ ] Confirming deletes all selected files and clears selection
+- [ ] Selection is cleared when popover is closed and reopened
+- [ ] Selection survives search filter changes (files remain selected when hidden by filter)
+- [ ] Deleting a project clears selection for files in that project
+- [ ] "Clean All" clears all file selections
+- [ ] Selected file count in footer reflects actual selection regardless of search filter
+- [ ] Batch delete handles symlink targets correctly (same scope rules as single delete)
+
+## Active Session Detection
+- [ ] Projects with files modified within the last 60 seconds show a green pulsing "live" badge
+- [ ] Projects with actively growing files (positive growth rate) show the "live" badge even if lastModified is slightly older than 60s
+- [ ] The "live" badge disappears after 60 seconds of no file activity (next scan after inactivity)
+- [ ] The green dot in the "live" badge pulses smoothly (opacity 0.4→1.0, ~1s cycle)
+- [ ] Hovering the "live" badge shows tooltip "Claude Code is actively writing to this project"
+- [ ] "stale" and "live" badges never appear simultaneously on the same project
+- [ ] Multiple projects can show the "live" badge simultaneously
+- [ ] The "live" badge does not persist across popover close/reopen (animation restarts fresh)
+- [ ] A project with lastModified >7 days old but with actively growing files shows "live" not "stale" (isActive takes precedence)
+- [ ] A project shows the "live" badge when its files have positive growth rate even if the file's last-modified timestamp is older than 60 seconds
+- [ ] A project's "live" badge disappears after file growth stops AND 60 seconds have elapsed (verified after next scan completes)
+- [ ] A project with duplicated symlink targets (xN badge visible) still shows the "live" badge when its files are actively being written to
+- [ ] Opening the popover for a project already active from a previous scan shows the "live" badge immediately
+
 ## Notifications
 - [ ] Warning notification fires when a file crosses the warning threshold
 - [ ] Critical notification fires when a file crosses the critical threshold
 - [ ] Same file does not trigger duplicate notifications
 - [ ] Notifications for deleted files are cleared from tracking
+
+## Tabbed Settings / Split Watchdog Toggles
+- [ ] Settings window shows 3 tabs: General, File Operations, Blocked Commands
+- [ ] Tab switching works and each tab shows its own content
+- [ ] General tab contains threshold settings, toggles (show size, notifications, launch at login, auto-update)
+- [ ] File Operations tab: toggle enables/disables file ops watchdog independently
+- [ ] Blocked Commands tab: toggle enables/disables command watchdog independently
+- [ ] Enable file ops only → hook installed with matcher `Write|Edit|Bash`, script has directory checks but no blocked commands loop
+- [ ] Enable commands only → hook installed with matcher `Bash`, script has blocked commands loop but no directory checks
+- [ ] Enable both → hook installed with matcher `Write|Edit|Bash`, script has both sections
+- [ ] Disable both → hook fully uninstalled from settings.local.json
+- [ ] Migration: set old `watchdogEnabled=true` in UserDefaults, launch → both new toggles start enabled, old key removed
+- [ ] Help text visible only when the tab's toggle is enabled
+- [ ] Hook status indicator (green/red dot) appears on both File Operations and Blocked Commands tabs when either feature is enabled
+- [ ] Error messages from hook installation appear on both watchdog tabs
+- [ ] Enable file ops only, verify blocked commands (e.g., sudo) are allowed through (command watchdog is off)
+- [ ] Enable commands only, verify destructive file ops outside allowed dirs (e.g., rm /outside/path) are allowed through (file ops watchdog is off)
+- [ ] Enable file ops → disable file ops → enable commands: verify hook reinstalls with Bash-only matcher
+- [ ] When both toggles are off, hook status indicator is not shown on either watchdog tab
+
+## Disk Pressure Detection
+- [ ] When available disk space is below the threshold, an orange "Low Disk Space" banner appears between projects and update banner
+- [ ] Banner shows free space in GB and Claude tmp usage (e.g., "5.2 GB free — 150 MB used by Claude tmp")
+- [ ] Banner disappears automatically when disk space recovers above the threshold
+- [ ] First scan below threshold fires a system notification with "Low Disk Space" title
+- [ ] Subsequent scans while still under pressure do NOT fire additional notifications
+- [ ] After space recovers and then drops below threshold again, a new notification fires (new episode)
+- [ ] Setting threshold very high (e.g., 999 GB) triggers the banner on next scan
+- [ ] Setting threshold below current free space hides the banner on next scan
+- [ ] Toggling "Low disk space warnings" off in Settings immediately hides the banner
+- [ ] Toggling "Low disk space warnings" on with threshold above free space shows the banner and fires notification
+- [ ] "Free space threshold" row is hidden in Settings when the toggle is off
+- [ ] "Free space threshold" row appears in Settings when the toggle is on
+- [ ] Threshold values are clamped to 1-500 GB range
+- [ ] Disk pressure settings persist after app relaunch
+- [ ] Banner is not shown when disk space cannot be read (fail-open behavior)
+- [ ] When "Notifications" toggle is off while disk is under pressure, no notification fires; re-enabling notifications does NOT retroactively fire one for the ongoing episode
+- [ ] When disk pressure feature is disabled then re-enabled while still under pressure, a new notification fires (toggle off+on starts a new episode)
+- [ ] When free space is exactly equal to the threshold (e.g., both 10 GB), no banner and no notification appears (strict less-than boundary)
+- [ ] When both disk pressure banner and update banner are active simultaneously, both display without layout overflow or clipping
+- [ ] Entering a value outside 1–500 GB, closing Settings, and relaunching loads the clamped value from UserDefaults
+- [ ] With rapid FSEvents-triggered scans while under pressure, only one "Low Disk Space" notification fires (not one per scan)
