@@ -1,9 +1,9 @@
-# Disabled until Developer ID code signing is configured.
-# See feature/codesign-notarize branch.
 name: Release
 
 on:
-  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
 
 jobs:
   build-and-release:
@@ -37,7 +37,7 @@ jobs:
         env:
           SIGNING_IDENTITY: ${{ secrets.SIGNING_IDENTITY }}
         run: |
-          codesign --force --deep --options runtime \
+          codesign --force --options runtime \
             --sign "$SIGNING_IDENTITY" \
             ".build/release/Scumbag Claude.app"
           codesign --verify --deep --strict ".build/release/Scumbag Claude.app"
