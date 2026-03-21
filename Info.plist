@@ -24,6 +24,10 @@
     <string>13.0</string>
     <key>LSUIElement</key>
     <true/>
+    <key>SUFeedURL</key>
+    <string>https://underactive.github.io/scumbag-claude/appcast.xml</string>
+    <key>SUPublicEDKey</key>
+    <string>fJsL/jl1/Es0JMHCCiGJMgBmuIUqqBaj/4fgwNiD7OE=</string>
     <key>NSPrincipalClass</key>
     <string>NSApplication</string>
 </dict>

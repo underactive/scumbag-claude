@@ -50,7 +50,7 @@
 - [ ] Right-clicking the menubar icon shows a context menu
 - [ ] Context menu contains "About Scumbag Claude", "Check for Updates...", and "Quit"
 - [ ] "About Scumbag Claude" opens the About dialog
-- [ ] "Check for Updates..." checks GitHub API and opens popover to show result
+- [ ] "Check for Updates..." opens Sparkle's standard update window
 - [ ] "Quit" terminates the application
 
 ## About Dialog
@@ -93,26 +93,17 @@
 - [ ] Footer buttons (bordered) visually contrast with inline project/file confirm/cancel buttons (plain) intentionally and consistently
 - [ ] Footer does not overflow horizontally when Clean All confirmation buttons are visible alongside Settings and Quit
 
-## Auto-Update
-- [ ] On launch, auto-check triggers if enough time has passed since last check (24h default)
-- [ ] "Check for Updates..." in right-click menu checks GitHub and shows result in popover
-- [ ] When an update is available, blue-tinted banner appears between projects and footer
-- [ ] "Update" button in banner starts download with progress bar
-- [ ] "Cancel" button during download cancels and cleans up temp files
-- [ ] After download completes, "Ready to install" banner appears with "Install & Restart" button
-- [ ] Dismiss (X) button hides the banner and persists dismissed version across popover open/close
-- [ ] Dismissed version does not re-show banner until a newer version is released
-- [ ] When up to date (no newer release), popover shows ".upToDate" status briefly
-- [ ] Network errors during manual check show error message with "Retry" button
-- [ ] Network errors during automatic check fail silently (status stays .idle)
-- [ ] "Check for updates automatically" toggle in Settings persists preference
-- [ ] Disabling auto-check stops the periodic timer
-- [ ] Re-enabling auto-check restarts the periodic timer
-- [ ] About dialog shows "Update v{x.y.z} available" when update is available
-- [ ] About dialog shows "Up to date" in green when up to date
-- [ ] About dialog shows spinner + "Checking..." during check
-- [ ] Running from dev build (swift run) shows "update manually" error instead of attempting install
-- [ ] Install flow: app terminates, shell script replaces bundle, clears quarantine, relaunches
+## Auto-Update (Sparkle)
+- [ ] "Check for Updates..." in right-click menu opens Sparkle's standard update window
+- [ ] Sparkle checks appcast.xml and shows available updates in its native UI
+- [ ] Sparkle handles download, progress display, and installation natively
+- [ ] "Check for updates automatically" toggle in Settings persists preference via Sparkle
+- [ ] Disabling auto-check toggle stops Sparkle's periodic checks
+- [ ] Re-enabling auto-check toggle restarts Sparkle's periodic checks
+- [ ] About dialog shows version without update status (no update-specific UI)
+- [ ] Popover has no update banner section (Sparkle uses its own window)
+- [ ] App bundle contains Sparkle.framework in Contents/Frameworks/
+- [ ] `codesign --verify --deep --strict` passes on the signed bundle
 
 ## FSEvents Detection
 - [ ] Creating a new file in `/private/tmp/claude-*/` is detected within ~3 seconds (vs 15s poll)
@@ -358,6 +349,6 @@
 - [ ] When "Notifications" toggle is off while disk is under pressure, no notification fires; re-enabling notifications does NOT retroactively fire one for the ongoing episode
 - [ ] When disk pressure feature is disabled then re-enabled while still under pressure, a new notification fires (toggle off+on starts a new episode)
 - [ ] When free space is exactly equal to the threshold (e.g., both 10 GB), no banner and no notification appears (strict less-than boundary)
-- [ ] When both disk pressure banner and update banner are active simultaneously, both display without layout overflow or clipping
+- [ ] Disk pressure banner displays correctly without layout overflow or clipping
 - [ ] Entering a value outside 1–500 GB, closing Settings, and relaunching loads the clamped value from UserDefaults
 - [ ] With rapid FSEvents-triggered scans while under pressure, only one "Low Disk Space" notification fires (not one per scan)

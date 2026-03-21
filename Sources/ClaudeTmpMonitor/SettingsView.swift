@@ -1,9 +1,10 @@
 import SwiftUI
 import AppKit
+import Sparkle
 
 struct SettingsView: View {
+    let updater: SPUUpdater
     @EnvironmentObject var monitor: MonitorService
-    @EnvironmentObject var updateService: UpdateService
     @EnvironmentObject var historyService: HistoryService
     @EnvironmentObject var watchdogService: WatchdogService
 
@@ -58,7 +59,10 @@ struct SettingsView: View {
             Toggle("Launch at Login", isOn: $monitor.launchAtLogin)
                 .font(.subheadline)
 
-            Toggle("Check for updates automatically", isOn: $updateService.checkForUpdatesAutomatically)
+            Toggle("Check for updates automatically", isOn: Binding(
+                get: { updater.automaticallyChecksForUpdates },
+                set: { updater.automaticallyChecksForUpdates = $0 }
+            ))
                 .font(.subheadline)
 
             Spacer()

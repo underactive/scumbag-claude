@@ -13,6 +13,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Build release binary
         run: make bundle
@@ -32,6 +34,22 @@ jobs:
           security set-key-partition-list -S apple-tool:,apple: -k "" "$KEYCHAIN_PATH"
           security list-keychains -d user -s "$KEYCHAIN_PATH" login.keychain-db
           rm "$RUNNER_TEMP/cert.p12"
+
+      - name: Sign embedded frameworks
+        env:
+          SIGNING_IDENTITY: ${{ secrets.SIGNING_IDENTITY }}
+        run: |
+          FWPATH=".build/release/Scumbag Claude.app/Contents/Frameworks/Sparkle.framework"
+          # Sign inner components inside-out, preserving embedded entitlements
+          codesign --force --options runtime --preserve-metadata=entitlements \
+            --sign "$SIGNING_IDENTITY" "$FWPATH/Versions/B/XPCServices/Downloader.xpc"
+          codesign --force --options runtime --preserve-metadata=entitlements \
+            --sign "$SIGNING_IDENTITY" "$FWPATH/Versions/B/XPCServices/Installer.xpc"
+          codesign --force --options runtime --preserve-metadata=entitlements \
+            --sign "$SIGNING_IDENTITY" "$FWPATH/Versions/B/Updater.app"
+          codesign --force --options runtime --preserve-metadata=entitlements \
+            --sign "$SIGNING_IDENTITY" "$FWPATH/Versions/B/Autoupdate"
+          codesign --force --options runtime --sign "$SIGNING_IDENTITY" "$FWPATH"
 
       - name: Sign app bundle
         env:
@@ -68,6 +86,83 @@ jobs:
             -ov \
             -format UDZO \
             ".build/release/Scumbag-Claude-${{ steps.version.outputs.tag }}.dmg"
+
+      - name: Download Sparkle tools
+        run: |
+          set -e
+          SPARKLE_VERSION="2.9.0"
+          curl -L "https://github.com/sparkle-project/Sparkle/releases/download/${SPARKLE_VERSION}/Sparkle-${SPARKLE_VERSION}.tar.xz" \
+            -o /tmp/sparkle.tar.xz
+          mkdir -p /tmp/sparkle-tools
+          tar -xf /tmp/sparkle.tar.xz -C /tmp/sparkle-tools
+
+      - name: Sign DMG with EdDSA and update appcast
+        env:
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          set -e
+          VERSION="${{ steps.version.outputs.tag }}"
+          VERSION_CLEAN="${VERSION#v}"
+          DMG_PATH=".build/release/Scumbag-Claude-${VERSION}.dmg"
+          DMG_SIZE=$(stat -f%z "$DMG_PATH")
+          DMG_URL="https://github.com/underactive/scumbag-claude/releases/download/${VERSION}/Scumbag-Claude-${VERSION}.dmg"
+
+          # EdDSA signature via sign_update (reads SPARKLE_PRIVATE_KEY from env var)
+          SIGN_OUTPUT=$(/tmp/sparkle-tools/bin/sign_update "$DMG_PATH")
+          SIGNATURE=$(echo "$SIGN_OUTPUT" | grep 'sparkle:edSignature=' | sed 's/.*sparkle:edSignature="\([^"]*\)".*/\1/')
+          if [ -z "$SIGNATURE" ]; then
+            echo "Error: Failed to extract EdDSA signature from sign_update output"
+            echo "sign_update output: $SIGN_OUTPUT"
+            exit 1
+          fi
+
+          # Prepare gh-pages branch
+          git fetch origin gh-pages 2>/dev/null || true
+          if git rev-parse --verify origin/gh-pages >/dev/null 2>&1; then
+            git worktree add /tmp/gh-pages origin/gh-pages
+          else
+            git worktree add --detach /tmp/gh-pages
+            cd /tmp/gh-pages
+            git checkout --orphan gh-pages
+            git rm -rf . 2>/dev/null || true
+            cd -
+          fi
+
+          # Build the new appcast item
+          NEW_ITEM="    <item>
+              <title>Version ${VERSION_CLEAN}</title>
+              <pubDate>$(date -R)</pubDate>
+              <sparkle:version>${VERSION_CLEAN}</sparkle:version>
+              <sparkle:shortVersionString>${VERSION_CLEAN}</sparkle:shortVersionString>
+              <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+              <enclosure url=\"${DMG_URL}\" length=\"${DMG_SIZE}\" type=\"application/octet-stream\" sparkle:edSignature=\"${SIGNATURE}\" />
+          </item>"
+
+          if [ -f /tmp/gh-pages/appcast.xml ]; then
+            # Insert new item before closing </channel> tag
+            awk -v item="$NEW_ITEM" '/<\/channel>/ { print item } { print }' \
+              /tmp/gh-pages/appcast.xml > /tmp/gh-pages/appcast_new.xml
+            mv /tmp/gh-pages/appcast_new.xml /tmp/gh-pages/appcast.xml
+          else
+            cat > /tmp/gh-pages/appcast.xml <<'APPCAST_EOF'
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+    <channel>
+        <title>Scumbag Claude</title>
+    </channel>
+</rss>
+APPCAST_EOF
+            # Insert the first item into the fresh appcast
+            awk -v item="$NEW_ITEM" '/<\/channel>/ { print item } { print }' \
+              /tmp/gh-pages/appcast.xml > /tmp/gh-pages/appcast_new.xml
+            mv /tmp/gh-pages/appcast_new.xml /tmp/gh-pages/appcast.xml
+          fi
+
+          cd /tmp/gh-pages
+          git add appcast.xml
+          git -c user.name="github-actions[bot]" -c user.email="github-actions[bot]@users.noreply.github.com" \
+            commit -m "Update appcast for ${VERSION}"
+          git push origin gh-pages
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

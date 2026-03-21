@@ -137,7 +137,6 @@ private struct PulsingDot: View {
 
 struct ContentView: View {
     @EnvironmentObject var monitor: MonitorService
-    @EnvironmentObject var updateService: UpdateService
     @EnvironmentObject var historyService: HistoryService
     @State private var expandedProjects: Set<String> = []
     @State private var confirmDelete: DeleteConfirmation? = nil
@@ -169,11 +168,6 @@ struct ContentView: View {
             if monitor.diskPressureDetected {
                 Divider()
                 diskPressureBannerSection
-            }
-
-            if updateService.shouldShowBanner || updateService.status.isActiveUpdate {
-                Divider()
-                updateBannerSection
             }
 
             Divider()
@@ -575,107 +569,6 @@ struct ContentView: View {
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
         .background(Color.orange.opacity(0.08))
-    }
-
-    // MARK: - Update Banner
-
-    private var updateBannerSection: some View {
-        Group {
-            switch updateService.status {
-            case .available(let version, _, _):
-                HStack(spacing: 8) {
-                    Image(systemName: "arrow.up.circle.fill")
-                        .foregroundColor(.accentColor)
-                    Text("v\(version) available")
-                        .font(.subheadline)
-                    Spacer()
-                    Button("Update") {
-                        updateService.downloadUpdate()
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .font(.subheadline)
-                    Button(action: { updateService.dismissUpdate() }) {
-                        Image(systemName: "xmark")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                    .buttonStyle(HoverButtonStyle())
-                    .accessibilityLabel("Dismiss update")
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(Color.accentColor.opacity(0.08))
-
-            case .downloading(let progress):
-                HStack(spacing: 8) {
-                    ProgressView(value: progress)
-                        .progressViewStyle(.linear)
-                    Text("\(Int(progress * 100))%")
-                        .font(.caption.monospacedDigit())
-                        .foregroundColor(.secondary)
-                        .frame(width: 32, alignment: .trailing)
-                    Button("Cancel") { updateService.cancelDownload() }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                        .font(.subheadline)
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-
-            case .readyToInstall:
-                HStack(spacing: 8) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(.green)
-                    Text("Ready to install")
-                        .font(.subheadline)
-                    Spacer()
-                    Button("Install & Restart") {
-                        updateService.installUpdate()
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .font(.subheadline)
-                    .tint(.accentColor)
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-
-            case .installing:
-                HStack(spacing: 8) {
-                    ProgressView()
-                        .controlSize(.small)
-                    Text("Installing...")
-                        .font(.subheadline)
-                        .foregroundColor(.secondary)
-                    Spacer()
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-
-            case .error(let message):
-                HStack(spacing: 8) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundColor(.red)
-                    Text(message)
-                        .font(.caption)
-                        .foregroundColor(.red)
-                        .lineLimit(2)
-                    Spacer()
-                    Button("Retry") {
-                        Task { await updateService.checkForUpdates(manual: true) }
-                    }
-                    .buttonStyle(.bordered)
-                    .controlSize(.small)
-                    .font(.subheadline)
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-
-            default:
-                EmptyView()
-            }
-        }
     }
 
     // MARK: - Footer

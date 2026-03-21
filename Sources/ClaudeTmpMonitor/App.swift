@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import Combine
+import Sparkle
 
 @MainActor
 class AppDelegate: NSObject, NSApplicationDelegate {
@@ -8,7 +9,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var popover: NSPopover!
     private var rightClickMenu: NSMenu!
     let monitor = MonitorService()
-    let updateService = UpdateService()
+    let updaterController = SPUStandardUpdaterController(
+        startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil
+    )
     let historyService = HistoryService()
     let watchdogService = WatchdogService()
     private var cancellables = Set<AnyCancellable>()
@@ -98,7 +101,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                     onOpenStats: { [weak self] in self?.openStats() }
                 )
                 .environmentObject(monitor)
-                .environmentObject(updateService)
                 .environmentObject(historyService)
         )
         hostingController.sizingOptions = .preferredContentSize
@@ -179,13 +181,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     // MARK: - Check for Updates
 
     @objc func checkForUpdates() {
-        Task { @MainActor in
-            await updateService.checkForUpdates(manual: true)
-        }
-        // Show the popover so user can see the result
-        if let button = statusItem.button, !popover.isShown {
-            togglePopover(button)
-        }
+        updaterController.checkForUpdates(nil)
     }
 
     // MARK: - Settings Window
@@ -197,9 +193,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        let settingsView = SettingsView()
+        let settingsView = SettingsView(updater: updaterController.updater)
             .environmentObject(monitor)
-            .environmentObject(updateService)
             .environmentObject(historyService)
             .environmentObject(watchdogService)
         let hostingController = NSHostingController(rootView: settingsView)
@@ -251,7 +246,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let aboutView = AboutView()
-            .environmentObject(updateService)
         let hostingController = NSHostingController(rootView: aboutView)
 
         let window = NSWindow(contentViewController: hostingController)

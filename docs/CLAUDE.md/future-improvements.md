@@ -31,7 +31,7 @@
 ## Polish
 
 - [ ] **Actionable notifications** — Click notification to open popover, or add a "Delete" action directly from the system notification.
-- [ ] **Updater improvements** — Add checksum (SHA256) verification for downloaded updates, delta updates instead of full zip, or adopt Sparkle framework for more robust updating.
+- [x] **Updater improvements** — Adopted Sparkle 2.x framework for auto-updates with EdDSA signature verification, native macOS update UI, and appcast feed. Replaced custom UpdateService.
 - [ ] **Test target** — Add unit tests for `MonitorService.scan()` logic, `extractProjectName()`, and threshold calculations to catch regressions.
 
 ## Active Intelligence
