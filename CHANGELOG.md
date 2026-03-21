@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.2] - 2026-03-20
+
+### Changed
+
+- **DMG distribution**: release workflow now packages the signed+notarized app as a compressed DMG (UDZO) instead of a zip archive, providing the standard macOS distribution experience
+- Auto-update service downloads `.dmg` assets, mounts with `hdiutil attach`, copies the `.app` out, and detaches — all on a background thread to avoid blocking the UI
+- Replaced `extractionFailed` error with `mountFailed` for clearer diagnostics
+
 ## [0.5.1] - 2026-03-20
 
 ### Added
