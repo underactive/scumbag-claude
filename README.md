@@ -69,7 +69,8 @@ This builds a release binary, packages it into `Scumbag Claude.app`, and copies 
 | `swift build` | Debug build |
 | `make build` | Release build |
 | `make bundle` | Release build + `.app` bundle at `.build/release/Scumbag Claude.app` |
-| `make install` | Bundle + copy to `/Applications` |
+| `make sign` | Bundle + code sign with Developer ID certificate (auto-detected) |
+| `make install` | Sign + copy to `/Applications` |
 | `make run` | Release build and run directly |
 | `make clean` | Remove build artifacts |
 
