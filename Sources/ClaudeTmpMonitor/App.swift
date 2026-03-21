@@ -21,7 +21,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private static let iconSize = NSSize(width: 18, height: 18)
 
     private static let baseImage: NSImage? = {
-        guard let url = Bundle.module.url(forResource: "MenuBarIcon", withExtension: "png"),
+        guard let url = Bundle.main.url(forResource: "MenuBarIcon", withExtension: "png"),
               let img = NSImage(contentsOf: url) else { return nil }
         img.size = iconSize
         return img

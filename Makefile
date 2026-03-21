@@ -19,8 +19,8 @@ bundle: build
 	@cp $(RELEASE_DIR)/$(EXECUTABLE) "$(RELEASE_DIR)/$(BUNDLE_NAME)/Contents/MacOS/"
 	@cp Info.plist "$(RELEASE_DIR)/$(BUNDLE_NAME)/Contents/"
 	@cp Sources/ClaudeTmpMonitor/Resources/AppIcon.icns "$(RELEASE_DIR)/$(BUNDLE_NAME)/Contents/Resources/"
-	@# Copy SPM resource bundle to Resources (standard location, avoids codesign issues)
-	@cp -R $(RELEASE_DIR)/ClaudeTmpMonitor_ClaudeTmpMonitor.bundle "$(RELEASE_DIR)/$(BUNDLE_NAME)/Contents/Resources/" 2>/dev/null || true
+	@cp Sources/ClaudeTmpMonitor/Resources/MenuBarIcon.png "$(RELEASE_DIR)/$(BUNDLE_NAME)/Contents/Resources/"
+	@cp Sources/ClaudeTmpMonitor/Resources/MenuBarIcon@2x.png "$(RELEASE_DIR)/$(BUNDLE_NAME)/Contents/Resources/"
 	@echo "Built: $(RELEASE_DIR)/$(BUNDLE_NAME)"
 
 sign: bundle
