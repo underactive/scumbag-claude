@@ -8,7 +8,7 @@ let package = Package(
         .executableTarget(
             name: "ClaudeTmpMonitor",
             path: "Sources/ClaudeTmpMonitor",
-            resources: [.process("Resources")]
+            exclude: ["Resources"]
         )
     ]
 )
