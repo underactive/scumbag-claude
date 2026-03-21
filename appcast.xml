@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
+    <channel>
+        <title>Scumbag Claude</title>
+        <item>
+            <title>Version 0.6.0</title>
+            <pubDate>Sat, 21 Mar 2026 21:09:28 +0000</pubDate>
+            <sparkle:version>0.6.0</sparkle:version>
+            <sparkle:shortVersionString>0.6.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>13.0</sparkle:minimumSystemVersion>
+            <enclosure url="https://github.com/underactive/scumbag-claude/releases/download/v0.6.0/Scumbag-Claude-v0.6.0.dmg" length="3261908" type="application/octet-stream" sparkle:edSignature="ZNwmuZ6wRWQFy4HEkJrmRCiiJZ5Npw2evBBjzx8+H/PlygaemDUtXTbuI3LRO9Gusq61n06dmsLSbVmDKyFVBg==" />
+        </item>
+    </channel>
+</rss>
