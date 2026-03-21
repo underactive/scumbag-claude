@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.1] - 2026-03-20
+
+### Added
+
+- **Developer ID code signing and notarization**: release workflow now signs with Developer ID certificate, submits to Apple for notarization, and staples the ticket — no more Gatekeeper warnings for downloaded builds
+- `make sign` target with auto-detected Developer ID certificate; `make install` now signs before copying to `/Applications/`
+- Release workflow triggers on `v*` tag push instead of manual dispatch
+
+### Changed
+
+- Moved SPM resource bundle from `Contents/MacOS/` to `Contents/Resources/` to fix `codesign` "unrecognized bundle format" error
+- Removed `--deep` flag from `codesign` in favor of correct inside-out signing
+- Re-enabled auto-update feature (was disabled pending code signing)
+
 ## [0.5.0] - 2026-03-19
 
 ### Added
