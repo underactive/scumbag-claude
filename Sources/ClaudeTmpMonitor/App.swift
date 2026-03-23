@@ -114,11 +114,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             keyEquivalent: ""
         ).target = self
         rightClickMenu.addItem(
-            withTitle: "Check for Updates...",
-            action: #selector(checkForUpdates),
-            keyEquivalent: ""
-        ).target = self
-        rightClickMenu.addItem(
             withTitle: "Statistics",
             action: #selector(openStats),
             keyEquivalent: ""
@@ -176,12 +171,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             button.title = ""
         }
-    }
-
-    // MARK: - Check for Updates
-
-    @objc func checkForUpdates() {
-        updaterController.checkForUpdates(nil)
     }
 
     // MARK: - Settings Window
@@ -245,14 +234,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             return
         }
 
-        let aboutView = AboutView()
+        let aboutView = AboutView(updater: updaterController.updater)
         let hostingController = NSHostingController(rootView: aboutView)
 
         let window = NSWindow(contentViewController: hostingController)
         window.title = "About Scumbag Claude"
         window.styleMask = [.titled, .closable]
         window.isReleasedWhenClosed = false
-        window.setContentSize(NSSize(width: 300, height: 220))
+        window.setContentSize(NSSize(width: 300, height: 260))
         window.center()
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)

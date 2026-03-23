@@ -30,7 +30,7 @@ Claude Code writes task output to `/private/tmp/claude-*/` directories. These `.
 - **Disk pressure detection** -- monitors available system disk space via APFS-aware API, shows an orange "Low Disk Space" banner when free space drops below a configurable threshold (default 10 GB)
 - **Auto-update via Sparkle** -- automatic update checking with EdDSA signature verification and native macOS update UI, powered by the [Sparkle](https://sparkle-project.org/) framework
 - **Configurable thresholds** -- set your own warning/critical size limits, scan interval, and stale directory age
-- **Settings & About dialogs** -- dedicated settings window and right-click context menu with About dialog
+- **Settings & About dialogs** -- dedicated settings window and right-click context menu with About dialog (includes check-for-updates with last-checked timestamp and Ko-fi support link)
 - **Launch at login** -- optional auto-start via macOS `ServiceManagement`
 - **Menubar-only** -- no Dock icon, no windows cluttering your workspace
 

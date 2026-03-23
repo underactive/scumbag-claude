@@ -4,7 +4,7 @@
 
 **Scumbag Claude** (aka Claude Tmp Monitor) is a macOS menubar application that monitors Claude Code's temporary file directories (`/private/tmp/claude-*/`) for large `.output` files and stale task directories, alerting the user and providing quick cleanup actions.
 
-**Current Version:** 0.6.2
+**Current Version:** 0.7.0
 **Status:** In development
 
 ---
@@ -20,13 +20,13 @@ Not applicable — this is a software-only macOS application.
 ### Core Files
 Eight-file SwiftUI app using a custom `NSStatusItem` for menubar integration.
 
-- `Sources/ClaudeTmpMonitor/App.swift` - Entry point: `@main` SwiftUI App with `NSApplicationDelegateAdaptor`. `AppDelegate` owns `MonitorService`, `SPUStandardUpdaterController` (Sparkle), `HistoryService`, and `WatchdogService`, creates `NSStatusItem` with `NSPopover` (left-click) and `NSMenu` (right-click). Manages singleton `NSWindow` instances for Settings, About, and Statistics dialogs. Uses `Combine` subscriber on `monitor.$status` + `monitor.$totalSize` + `monitor.$sizeTrend` to reactively update menubar icon, title, and trend indicator. Wires `monitor.onScanComplete` callback to `HistoryService.recordSnapshot()`. Flushes history on `applicationWillTerminate`. "Check for Updates..." right-click menu item delegates to Sparkle's standard update window. Loads menubar icon from `Bundle.main` resources.
+- `Sources/ClaudeTmpMonitor/App.swift` - Entry point: `@main` SwiftUI App with `NSApplicationDelegateAdaptor`. `AppDelegate` owns `MonitorService`, `SPUStandardUpdaterController` (Sparkle), `HistoryService`, and `WatchdogService`, creates `NSStatusItem` with `NSPopover` (left-click) and `NSMenu` (right-click). Manages singleton `NSWindow` instances for Settings, About, and Statistics dialogs. Uses `Combine` subscriber on `monitor.$status` + `monitor.$totalSize` + `monitor.$sizeTrend` to reactively update menubar icon, title, and trend indicator. Wires `monitor.onScanComplete` callback to `HistoryService.recordSnapshot()`. Flushes history on `applicationWillTerminate`. Passes `SPUUpdater` to `AboutView` for the check-for-updates button. Loads menubar icon from `Bundle.main` resources.
 - `Sources/ClaudeTmpMonitor/MonitorService.swift` - Core business logic: models (`MonitoredFile`, `ClaudeProject`, `MonitorStatus`, `SizeTrend`), FSEvents + timer-based scanning, growth rate tracking, active session detection, menubar trend indicator, symlink scope/deduplication visibility, disk pressure detection, settings persistence, notifications, deletion. Exposes `onScanComplete` callback invoked at the end of each `scan()`.
 - `Sources/ClaudeTmpMonitor/HistoryService.swift` - Historical data persistence: records scan snapshots (`HistorySnapshot`, `ProjectSnapshot` Codable models), two-tier aggregation (raw ≤1h, 5-minute buckets beyond), JSON storage in `~/Library/Application Support/com.esison.claude-tmp-monitor/history.json`, configurable retention (1–30 days), 60s save timer, querying by `TimeRange`.
 - `Sources/ClaudeTmpMonitor/ContentView.swift` - Main popover view: header, status bar, search/filter field with sort menu (Size/Name/Date), expandable projects list with symlink scope/deduplication badges, pulsing green "live" badge for active sessions, broken symlink counts, relative timestamps and file selection circles for batch delete. Disk pressure banner (orange), footer with Settings button, Stats button, Delete Selected, Clean Broken, Clean All, and Quit. Search filters projects by display name (case-insensitive); sort order applies to both projects and files within expanded projects. Receives `onOpenSettings` and `onOpenStats` closures from `AppDelegate`. Defines `HoverButtonStyle` (custom `ButtonStyle` with configurable hover color) and `PulsingDot` (animated green circle for active session indicator) used by project rows.
 - `Sources/ClaudeTmpMonitor/StatsView.swift` - Statistics window: dual chart rendering — area+line chart for 1h range, stacked bar charts color-coded by project for 24h/7d/30d ranges. Hover tooltips show per-project breakdown (size, percentage). Flow layout color legend below chart. 12-color palette with deterministic project mapping. Retention hint for 30d range. Segmented time range picker (1h/24h/7d/30d), current/peak/average summary stats, empty state. Hosted in a separate resizable `NSWindow` (700×550).
 - `Sources/ClaudeTmpMonitor/SettingsView.swift` - Settings dialog with TabView containing 3 tabs: General (threshold/interval rows, history retention, disk pressure toggle + threshold, notifications toggle, launch at login toggle, auto-update check toggle via Sparkle `SPUUpdater`), File Operations (file write watchdog toggle, directory allowlist, hook status), and Blocked Commands (command watchdog toggle, blocked commands list). Accepts `SPUUpdater` instance as init parameter. Hosted in a separate `NSWindow`.
-- `Sources/ClaudeTmpMonitor/AboutView.swift` - About dialog: app icon, name, version, GitHub link. Hosted in a separate `NSWindow`.
+- `Sources/ClaudeTmpMonitor/AboutView.swift` - About dialog: app icon, name, version, GitHub link, check-for-updates button with last-checked timestamp, Ko-fi link. Accepts `SPUUpdater` as init parameter. Hosted in a separate `NSWindow`.
 - `Sources/ClaudeTmpMonitor/WatchdogService.swift` - File write watchdog: manages Claude Code PreToolUse hook that blocks Write/Edit/Bash operations outside whitelisted directories. Two independent feature toggles: `fileOpsEnabled` (Write/Edit + destructive Bash) and `commandWatchdogEnabled` (blocked commands). `hookShouldBeInstalled` computed property returns true when either is enabled; `reconcileHookState()` installs/removes the hook accordingly. Generates bash hook script with JXA JSON parsing, patches `~/.claude/settings.local.json`, provides directory allowlist management. Migrates legacy `watchdogEnabled` key on init. Settings persisted via UserDefaults.
 
 ### Dependencies
@@ -120,7 +120,7 @@ diskPressureThresholdGB: Int    // default: 10, range: 1...500
 - Sparkle handles its own native macOS update UI: version checking, release notes display, download progress, and installation
 - Release DMGs are hosted on GitHub Releases; the appcast is hosted on GitHub Pages (`gh-pages` branch)
 - The release workflow generates the EdDSA signature via Sparkle's `sign_update` tool and appends new items to `appcast.xml`
-- UI: "Check for Updates..." in right-click menu opens Sparkle's standard update window, auto-check toggle in Settings binds to `SPUUpdater.automaticallyChecksForUpdates`
+- UI: "Check for Updates..." button in the About window triggers `SPUUpdater.checkForUpdates()` and shows last-checked timestamp. Auto-check toggle in Settings binds to `SPUUpdater.automaticallyChecksForUpdates`
 - Sparkle manages its own UserDefaults keys (prefixed with `SU`) — no custom persistence needed
 
 #### 7. File Write Watchdog (WatchdogService)
@@ -366,7 +366,7 @@ Version string appears in 2 files:
 | `Sources/ClaudeTmpMonitor/StatsView.swift` | Statistics window: SwiftUI Charts area+line chart, time range picker, summary stats |
 | `Sources/ClaudeTmpMonitor/SettingsView.swift` | Settings dialog view with 3-tab TabView (General, File Operations, Blocked Commands) |
 | `Sources/ClaudeTmpMonitor/WatchdogService.swift` | File write watchdog: PreToolUse hook management, script generation, Claude settings patching |
-| `Sources/ClaudeTmpMonitor/AboutView.swift` | About dialog view |
+| `Sources/ClaudeTmpMonitor/AboutView.swift` | About dialog view with check-for-updates button and Ko-fi link |
 | `Sources/ClaudeTmpMonitor/Resources/` | `MenuBarIcon.png`, `MenuBarIcon@2x.png`, `AppIcon.icns` |
 | `Info.plist` | App bundle config (`LSUIElement=true`, bundle ID `com.esison.claude-tmp-monitor`) |
 | `Makefile` | Build, bundle, install, run, clean targets |

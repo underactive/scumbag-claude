@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-03-22
+
+### Changed
+
+- **Check for Updates moved to About window**: "Check for Updates..." button relocated from the right-click context menu to the About window, with a last-checked timestamp showing when updates were last checked
+- **Ko-fi button standardized**: replaced custom-styled Ko-fi link (blue pill with padding/background) with a native-style button matching the rest of the About window
+
+### Removed
+
+- "Check for Updates..." item from the right-click context menu
+- `checkForUpdates()` method from `AppDelegate` (now handled directly by `AboutView` via `SPUUpdater`)
+
 ## [0.6.1] - 2026-03-21
 
 ### Changed
